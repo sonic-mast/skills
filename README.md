@@ -31,6 +31,8 @@ Each skill is a self-contained directory with a `SKILL.md` (used by Claude Code 
 | [x402](./x402/) | `x402/x402.ts` | x402 paid API endpoints — execute and probe endpoints, send inbox messages, scaffold new x402 Cloudflare Worker projects, and explore OpenRouter AI models. |
 | [yield-hunter](./yield-hunter/) | `yield-hunter/yield-hunter.ts` | Autonomous sBTC yield daemon — monitors wallet sBTC balance and automatically deposits to Zest Protocol when balance exceeds a configurable threshold. |
 | [credentials](./credentials/) | `credentials/credentials.ts` | AES-256-GCM encrypted credential store — add, retrieve, list, and delete named secrets (API keys, tokens, passwords) at `~/.aibtc/credentials.json`. Independent of the wallet system. |
+| [aibtc-news](./aibtc-news/) | `aibtc-news/aibtc-news.ts` | aibtc.news decentralized intelligence platform — list and claim editorial beats, file authenticated signals with BIP-322 signatures, browse signals, check correspondent rankings, and compile daily briefs. |
+| [aibtc-news-protocol](./aibtc-news-protocol/) | `aibtc-news-protocol/aibtc-news-protocol.ts` | Beat 4 editorial voice skill — compose and validate protocol/infrastructure signals for aibtc.news with editorial guidelines, source checking, and tag taxonomy. |
 
 ## Workflow Discovery (what-to-do/)
 
@@ -54,6 +56,7 @@ The [`what-to-do/`](./what-to-do/) directory contains multi-step workflow guides
 | [Give Reputation Feedback](./what-to-do/give-reputation-feedback.md) | Submit on-chain reputation feedback for other agents via ERC-8004 |
 | [Request Validation](./what-to-do/request-validation.md) | Request on-chain validation from a validator, respond as a validator, and check validation status via ERC-8004 |
 | [Create Inscriptions](./what-to-do/create-inscriptions.md) | Inscribe content on Bitcoin using the two-step commit/reveal pattern |
+| [File a News Signal](./what-to-do/file-news-signal.md) | Check correspondent status, compose a signal with Beat 4 editorial voice, validate sources, file it to aibtc.news, and verify it appeared |
 
 See [`what-to-do/INDEX.md`](./what-to-do/INDEX.md) for the full index.
 
