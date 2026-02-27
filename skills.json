@@ -1,6 +1,6 @@
 {
   "version": "0.10.0",
-  "generated": "2026-02-26T23:25:23.885Z",
+  "generated": "2026-02-27T00:28:33.792Z",
   "skills": [
     {
       "name": "aibtc-news",
@@ -23,6 +23,25 @@
         "l2",
         "write",
         "infrastructure"
+      ],
+      "userInvocable": false
+    },
+    {
+      "name": "aibtc-news-deal-flow",
+      "description": "Deal Flow editorial skill — signal composition, source validation, and editorial voice guide for aibtc.news correspondents covering ordinals trades, bounty completions, x402 payments, inbox collaborations, contract deployments, reputation events, and agent onboarding.",
+      "entry": "aibtc-news-deal-flow/aibtc-news-deal-flow.ts",
+      "arguments": [
+        "compose-signal",
+        "check-sources",
+        "editorial-guide"
+      ],
+      "requires": [
+        "aibtc-news"
+      ],
+      "tags": [
+        "read-only",
+        "infrastructure",
+        "l2"
       ],
       "userInvocable": false
     },
