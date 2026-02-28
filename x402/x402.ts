@@ -414,9 +414,9 @@ program
         }
 
         // Parse payment requirements from 402 response
-        const paymentHeader = initialRes.headers.get("x-payment-required");
+        const paymentHeader = initialRes.headers.get("payment-required");
         if (!paymentHeader) {
-          throw new Error("402 response missing x-payment-required header");
+          throw new Error("402 response missing payment-required header");
         }
 
         // Import x402 protocol utilities
