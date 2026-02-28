@@ -160,8 +160,9 @@ function validateSignal(
  * Build the file-signal CLI command string for easy copy-paste.
  */
 function buildFileCommand(signal: ComposedSignal): string {
-  const sourcesJson = JSON.stringify(signal.sources);
-  const tagsJson = JSON.stringify(signal.tags);
+  const escapeSingleQuotes = (s: string) => s.replace(/'/g, "'\\''");
+  const sourcesJson = escapeSingleQuotes(JSON.stringify(signal.sources));
+  const tagsJson = escapeSingleQuotes(JSON.stringify(signal.tags));
   return (
     `bun run aibtc-news/aibtc-news.ts file-signal` +
     ` --beat-id ${signal.beat}` +
