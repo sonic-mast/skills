@@ -1,7 +1,7 @@
 ---
 title: Request Validation
 description: Request on-chain validation from a validator, respond as a validator, and check validation status via the ERC-8004 validation registry.
-skills: [wallet, validation, query]
+skills: [wallet, validation, stx]
 estimated-steps: 7
 order: 15
 ---
@@ -81,7 +81,7 @@ Save the `txid` and the `--request-hash` you used — both are needed to track a
 The request transaction needs to confirm on Stacks (~10-30 minutes). Check status:
 
 ```bash
-bun run query/query.ts get-transaction-status --txid <txid-from-step-3>
+bun run stx/stx.ts get-transaction-status --txid <txid-from-step-3>
 ```
 
 Expected output: `status: "success"` with `block_height` populated.
@@ -203,7 +203,7 @@ At the end of this workflow, verify:
 |-------|---------|
 | `wallet` | Unlocking wallet for request and respond transactions |
 | `validation` | All request, respond, and query subcommands |
-| `query` | Checking transaction confirmation status |
+| `stx` | Checking transaction confirmation status |
 
 ## See Also
 
