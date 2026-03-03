@@ -11,11 +11,22 @@
  */
 
 import { Command } from "commander";
-import { schnorr } from "@noble/curves/secp256k1";
+import { schnorr } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
 import { NETWORK } from "../src/lib/config/networks.js";
 import { printJson, handleError } from "../src/lib/utils/cli.js";
-import { requireUnlockedWallet } from "../src/lib/services/wallet-manager.js";
+import { getWalletManager } from "../src/lib/services/wallet-manager.js";
+
+function requireUnlockedWallet() {
+  const walletManager = getWalletManager();
+  const account = walletManager.getActiveAccount();
+  if (!account) {
+    throw new Error(
+      "Wallet is not unlocked. Run: bun run wallet/wallet.ts unlock --password <password>"
+    );
+  }
+  return account;
+}
 
 const program = new Command();
 
@@ -182,7 +193,7 @@ program
           "BIP-341":
             "Taproot output structure — key-path and script-path spending",
           "BIP-342":
-            "Tapscript — OP_CHECKSIGADD for N-of-M threshold multisig",
+            "Tapscript — OP_CHECKSIGADD for M-of-N threshold multisig",
           "BIP-86":
             "HD key derivation for Taproot — m/86'/[coinType]'/0'/0/0",
         },

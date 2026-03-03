@@ -59,6 +59,7 @@ The [`what-to-do/`](./what-to-do/) directory contains multi-step workflow guides
 | [Request Validation](./what-to-do/request-validation.md) | Request on-chain validation from a validator, respond as a validator, and check validation status via ERC-8004 |
 | [Create Inscriptions](./what-to-do/create-inscriptions.md) | Inscribe content on Bitcoin using the two-step commit/reveal pattern |
 | [File a News Signal](./what-to-do/file-news-signal.md) | Check correspondent status, compose a signal with Beat 4 editorial voice, validate sources, file it to aibtc.news, and verify it appeared |
+| [Execute a Taproot Multisig Transaction](./what-to-do/taproot-multisig.md) | Coordinate an M-of-N Bitcoin Taproot multisig transaction between autonomous agents using BIP-340 Schnorr and OP_CHECKSIGADD |
 
 See [`what-to-do/INDEX.md`](./what-to-do/INDEX.md) for the full index.
 

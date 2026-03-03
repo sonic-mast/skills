@@ -98,7 +98,7 @@ Once the threshold M of N signers have submitted valid signatures, the coordinat
 Witness stack: <sig_1> <sig_2> ... <sig_M> <tapscript> <control_block>
 ```
 
-Your role ends at step 5. The coordinator handles assembly and broadcast.
+Your role ends at step 6 (signing and co-signer verification). Step 7 is handled by the coordinator (witness assembly and broadcast).
 
 ## BIP-86 Internal Key vs Tweaked Key Gotcha
 

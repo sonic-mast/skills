@@ -44,9 +44,14 @@ bun run taproot-multisig/taproot-multisig.ts get-pubkey
 Expected output:
 ```json
 {
+  "success": true,
   "internalPubKey": "abcd1234...",
   "taprootAddress": "bc1p...",
-  "derivationPath": "m/86'/0'/0'/0/0"
+  "network": "mainnet",
+  "keyFormat": "x-only (32 bytes)",
+  "derivationPath": "m/86'/0'/0'/0/0",
+  "usage": "Register 'internalPubKey' when joining a multisig. ...",
+  "warning": "Always register internalPubKey, NOT the tweaked key. ..."
 }
 ```
 
