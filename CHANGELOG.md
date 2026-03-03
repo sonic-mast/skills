@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/aibtcdev/skills/compare/skills-v0.12.1...skills-v0.13.0) (2026-03-03)
+
+
+### Features
+
+* **taproot-multisig:** add Taproot M-of-N multisig coordination skill ([#71](https://github.com/aibtcdev/skills/issues/71)) ([60a0ccc](https://github.com/aibtcdev/skills/commit/60a0ccc94bc82d8aeb84441cdbed2ef79469d52b))
+
 ## [0.12.1](https://github.com/aibtcdev/skills/compare/skills-v0.12.0...skills-v0.12.1) (2026-03-02)
 
 
