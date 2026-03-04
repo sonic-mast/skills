@@ -54,12 +54,13 @@ Output:
   "apr": {
     "minApr": 0.5,
     "maxApr": 5,
-    "unit": "%"
+    "unit": "%",
+    "note": "Multiplier up to 10x with stacked STX via PoX"
   },
   "cycleOverview": {
-    "currentCycle": 100,
-    "totalEnrolled": 42,
-    "totalSbtcLocked": "500000000"
+    "currentCycleId": 100,
+    "snapshotIndex": 3,
+    "snapshotsPerCycle": 144
   }
 }
 ```
