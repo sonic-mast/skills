@@ -17,6 +17,7 @@ import {
   uintCV,
   cvToJSON,
   hexToCV,
+  type ClarityValue,
 } from "@stacks/transactions";
 import { NETWORK, getExplorerTxUrl } from "../src/lib/config/networks.js";
 import { getHiroApi } from "../src/lib/services/hiro-api.js";
@@ -50,14 +51,14 @@ const SBTC_DECIMALS = 1e8;
  */
 async function readOnly(
   functionName: string,
-  args: ReturnType<typeof noneCV | typeof principalCV | typeof uintCV>[],
+  args: ClarityValue[],
   sender: string
 ): Promise<unknown> {
   const hiro = getHiroApi(NETWORK);
   const result = await hiro.callReadOnlyFunction(
     DUAL_STACKING_CONTRACT,
     functionName,
-    args as import("@stacks/transactions").ClarityValue[],
+    args,
     sender
   );
 
@@ -127,6 +128,14 @@ program
       const minAmountJson = minAmount as { value: string };
       const minEnrollmentRaw = parseInt(minAmountJson?.value ?? "10000", 10);
 
+      // Parse cycleOverview — contract returns a tuple, cvToJSON gives {type, value: {field: {type, value}}}
+      const overviewVal = (cycleOverview as { value: Record<string, { value: string }> })?.value ?? {};
+      const parsedOverview = {
+        currentCycleId: parseInt(overviewVal["cycle-id"]?.value ?? "0", 10),
+        snapshotIndex: parseInt(overviewVal["snapshot-index"]?.value ?? "0", 10),
+        snapshotsPerCycle: parseInt(overviewVal["snapshots-per-cycle"]?.value ?? "0", 10),
+      };
+
       printJson({
         address,
         network: NETWORK,
@@ -139,7 +148,7 @@ program
           unit: "%",
           note: "Multiplier up to 10x with stacked STX via PoX",
         },
-        cycleOverview: cycleOverview,
+        cycleOverview: parsedOverview,
       });
     } catch (error) {
       handleError(error);
