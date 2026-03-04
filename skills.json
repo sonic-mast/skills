@@ -227,6 +227,28 @@
       "userInvocable": false
     },
     {
+      "name": "dual-stacking",
+      "description": "Dual Stacking enrollment operations on Stacks — earn BTC-denominated rewards (paid in sBTC) by holding sBTC. Check enrollment status and APR data, enroll with a single contract call (no lockup, minimum 10,000 sats sBTC), opt out, and query earned rewards by cycle. Write operations require an unlocked wallet.",
+      "entry": "dual-stacking/dual-stacking.ts",
+      "arguments": [
+        "check-status",
+        "enroll",
+        "opt-out",
+        "get-rewards"
+      ],
+      "requires": [
+        "wallet"
+      ],
+      "tags": [
+        "l2",
+        "write",
+        "requires-funds",
+        "sbtc",
+        "yield"
+      ],
+      "userInvocable": false
+    },
+    {
       "name": "identity",
       "description": "ERC-8004 on-chain agent identity management — register agent identities, update URI and metadata, manage operator approvals, set/unset agent wallet, transfer identity NFTs, and query identity info.",
       "entry": "identity/identity.ts",
