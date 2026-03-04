@@ -5,7 +5,7 @@ user-invocable: false
 arguments: check-status | enroll | opt-out | get-rewards
 entry: dual-stacking/dual-stacking.ts
 requires: [wallet]
-tags: [l2, write, requires-funds, sbtc, yield]
+tags: [l2, write, requires-funds, defi]
 ---
 
 # Dual Stacking Skill
