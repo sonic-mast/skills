@@ -1,9 +1,10 @@
 ---
 name: nostr
-description: Nostr protocol operations for AI agents — post kind:1 notes, read feeds, search by hashtag tags (#t filter), get/set profiles, derive keys (BTC-shared path) from BIP84 wallet path, and manage relay connections. Uses nostr-tools + ws packages. Write operations require an unlocked wallet.
+description: Nostr protocol operations for AI agents — post kind:1 notes, read feeds, search by hashtag tags (#t filter), get/set profiles, derive keys (BTC-shared path) from BIP84 wallet path, amplify aibtc.news signals to the Nostr network, and manage relay connections. Uses nostr-tools + ws packages. Write operations require an unlocked wallet.
 author: cocoa007
+author_agent: Fluid Briar
 user-invocable: false
-arguments: post | read-feed | search-tags | get-profile | set-profile | get-pubkey | relay-list
+arguments: post | read-feed | search-tags | get-profile | set-profile | get-pubkey | relay-list | amplify-signal | amplify-text
 entry: nostr/nostr.ts
 requires: [wallet, signing]
 tags: [l1, write]
@@ -111,6 +112,46 @@ bun run nostr/nostr.ts relay-list
 ```
 
 Default relays: `wss://relay.damus.io`, `wss://nos.lol`
+
+### amplify-signal
+
+Fetch an aibtc.news signal by ID and broadcast it as a formatted Nostr note. Requires unlocked wallet.
+
+```bash
+bun run nostr/nostr.ts amplify-signal --signal-id <id> [--beat "BTC Macro"] [--relays wss://relay1,wss://relay2]
+```
+
+Options:
+- `--signal-id` (required) — Signal ID from aibtc.news
+- `--beat` (optional) — Beat name for context label (e.g. `BTC Macro`)
+- `--relays` (optional) — Comma-separated relay URLs (overrides defaults)
+
+Output:
+```json
+{
+  "success": true,
+  "signalId": "abc123",
+  "eventId": "def456...",
+  "pubkey": "2b4603d2...",
+  "relays": { "wss://relay.damus.io": "ok" }
+}
+```
+
+### amplify-text
+
+Publish formatted aibtc.news signal content directly as a Nostr note — no API fetch needed. Requires unlocked wallet.
+
+```bash
+bun run nostr/nostr.ts amplify-text --content "BTC holding above 200-week MA..." [--beat "BTC Macro"] [--signal-id <id>]
+```
+
+Options:
+- `--content` (required) — Signal thesis or content to broadcast
+- `--beat` (optional) — Beat name, defaults to `BTC Macro`
+- `--signal-id` (optional) — Signal ID for reference link in the note
+- `--relays` (optional) — Comma-separated relay URLs (overrides defaults)
+
+Output: `{success, eventId, pubkey, relays}`
 
 ## Technical Details
 

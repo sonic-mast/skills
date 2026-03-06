@@ -135,6 +135,43 @@ async function queryRelays(
 }
 
 // ---------------------------------------------------------------------------
+// aibtc.news amplification helpers
+// ---------------------------------------------------------------------------
+
+interface AibtcSignal {
+  thesis?: string;
+  target_claim?: string;
+  beat_topic?: string;
+}
+
+/**
+ * Format an aibtc.news signal as a Nostr note with standard tags.
+ */
+function formatSignalNote(signal: {
+  beat?: string;
+  content: string;
+  signalId?: string;
+}): { content: string; tags: string[][] } {
+  const parts: string[] = [];
+
+  if (signal.beat) parts.push(`📡 aibtc.news — ${signal.beat}`);
+  parts.push(signal.content);
+  if (signal.signalId) parts.push(`\nSignal: ${signal.signalId}`);
+  parts.push("\n#bitcoin #aibtcnews #nostr");
+
+  const tags: string[][] = [
+    ["t", "bitcoin"],
+    ["t", "aibtcnews"],
+    ["t", "nostr"],
+  ];
+  if (signal.signalId) {
+    tags.push(["r", `https://aibtc.news/signals/${signal.signalId}`]);
+  }
+
+  return { content: parts.join("\n"), tags };
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
@@ -414,6 +451,114 @@ program
       relays: DEFAULT_RELAYS,
       note: "relay.nostr.band is often unreachable from sandboxed environments. Prefer damus + nos.lol.",
     });
+  });
+
+// ---------------------------------------------------------------------------
+// amplify-signal
+// ---------------------------------------------------------------------------
+
+program
+  .command("amplify-signal")
+  .description(
+    "Fetch an aibtc.news signal by ID and broadcast it as a formatted Nostr note. Requires unlocked wallet."
+  )
+  .requiredOption("--signal-id <id>", "Signal ID from aibtc.news")
+  .option("--beat <name>", "Beat name for context (e.g. 'BTC Macro')")
+  .option("--relays <urls>", "Comma-separated relay URLs (overrides defaults)")
+  .action(async (opts) => {
+    try {
+      const { sk, pubkey } = deriveNostrKeys();
+      const relays = opts.relays
+        ? (opts.relays as string).split(",").map((r: string) => r.trim())
+        : DEFAULT_RELAYS;
+
+      // Fetch signal from aibtc.news API
+      const res = await fetch(
+        `https://1btc-news-api.p-d07.workers.dev/takes/${opts.signalId}`
+      );
+      if (!res.ok) throw new Error(`Failed to fetch signal: ${res.status} ${res.statusText}`);
+      const signal = (await res.json()) as AibtcSignal;
+
+      const content = signal.thesis || signal.target_claim || "";
+      if (!content) throw new Error("Signal has no content to amplify");
+
+      const { content: noteContent, tags } = formatSignalNote({
+        beat: opts.beat || signal.beat_topic || "aibtc.news",
+        content,
+        signalId: opts.signalId,
+      });
+
+      const template: EventTemplate = {
+        kind: 1,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: noteContent,
+      };
+
+      const event = finalizeEvent(template, sk);
+      const pool = createPool();
+      const results = await publishToRelays(pool, event, relays);
+      pool.close(relays);
+
+      printJson({
+        success: true,
+        signalId: opts.signalId,
+        eventId: event.id,
+        pubkey,
+        relays: results,
+      });
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// amplify-text
+// ---------------------------------------------------------------------------
+
+program
+  .command("amplify-text")
+  .description(
+    "Publish formatted aibtc.news signal content directly as a Nostr note (no API fetch needed). Requires unlocked wallet."
+  )
+  .requiredOption("--content <text>", "Signal content/thesis to broadcast")
+  .option("--beat <name>", "Beat name", "BTC Macro")
+  .option("--signal-id <id>", "Signal ID for reference link")
+  .option("--relays <urls>", "Comma-separated relay URLs (overrides defaults)")
+  .action(async (opts) => {
+    try {
+      const { sk, pubkey } = deriveNostrKeys();
+      const relays = opts.relays
+        ? (opts.relays as string).split(",").map((r: string) => r.trim())
+        : DEFAULT_RELAYS;
+
+      const { content: noteContent, tags } = formatSignalNote({
+        beat: opts.beat,
+        content: opts.content,
+        signalId: opts.signalId,
+      });
+
+      const template: EventTemplate = {
+        kind: 1,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: noteContent,
+      };
+
+      const event = finalizeEvent(template, sk);
+      const pool = createPool();
+      const results = await publishToRelays(pool, event, relays);
+      pool.close(relays);
+
+      printJson({
+        success: true,
+        eventId: event.id,
+        pubkey,
+        relays: results,
+      });
+    } catch (err) {
+      handleError(err);
+    }
   });
 
 // ---------------------------------------------------------------------------

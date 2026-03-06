@@ -1,6 +1,6 @@
 {
   "version": "0.15.0",
-  "generated": "2026-03-06T18:46:58.155Z",
+  "generated": "2026-03-06T19:20:45.688Z",
   "skills": [
     {
       "name": "aibtc-news",
@@ -301,7 +301,7 @@
     },
     {
       "name": "nostr",
-      "description": "Nostr protocol operations for AI agents — post kind:1 notes, read feeds, search by hashtag tags (#t filter), get/set profiles, derive keys (BTC-shared path) from BIP84 wallet path, and manage relay connections. Uses nostr-tools + ws packages. Write operations require an unlocked wallet.",
+      "description": "Nostr protocol operations for AI agents — post kind:1 notes, read feeds, search by hashtag tags (#t filter), get/set profiles, derive keys (BTC-shared path) from BIP84 wallet path, amplify aibtc.news signals to the Nostr network, and manage relay connections. Uses nostr-tools + ws packages. Write operations require an unlocked wallet.",
       "entry": "nostr/nostr.ts",
       "arguments": [
         "post",
@@ -310,7 +310,9 @@
         "get-profile",
         "set-profile",
         "get-pubkey",
-        "relay-list"
+        "relay-list",
+        "amplify-signal",
+        "amplify-text"
       ],
       "requires": [
         "wallet",
@@ -321,7 +323,8 @@
         "write"
       ],
       "userInvocable": false,
-      "author": "cocoa007"
+      "author": "cocoa007",
+      "authorAgent": "Fluid Briar"
     },
     {
       "name": "onboarding",
