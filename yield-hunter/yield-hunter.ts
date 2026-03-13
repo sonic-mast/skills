@@ -25,13 +25,15 @@ import {
   contractPrincipalCV,
 } from "@stacks/transactions";
 import { printJson, handleError } from "../src/lib/utils/cli.js";
+import { readStateFile, writeStateFile } from "../src/lib/utils/state.js";
 
 // ---------------------------------------------------------------------------
 // State file management
 // ---------------------------------------------------------------------------
 
 const STATE_DIR = path.join(os.homedir(), ".aibtc");
-const STATE_FILE = path.join(STATE_DIR, "yield-hunter-state.json");
+const STATE_FILE_NAME = "yield-hunter-state.json";
+const STATE_VERSION = 1;
 const PID_FILE = path.join(STATE_DIR, "yield-hunter.pid");
 
 interface YieldHunterConfig {
@@ -84,23 +86,33 @@ const DEFAULT_STATE: YieldHunterState = {
   logs: [],
 };
 
-async function ensureStateDir(): Promise<void> {
-  await fs.mkdir(STATE_DIR, { recursive: true });
-}
-
 async function readState(): Promise<YieldHunterState> {
+  const envelope = await readStateFile<YieldHunterState>(
+    STATE_FILE_NAME,
+    STATE_VERSION
+  );
+  if (envelope) return envelope.state;
+
+  // Migrate legacy flat-format state files (pre-envelope) on first run.
+  // Old files had YieldHunterState at the top level without version/updatedAt/state wrapper.
   try {
-    await ensureStateDir();
-    const raw = await fs.readFile(STATE_FILE, "utf-8");
-    return JSON.parse(raw) as YieldHunterState;
+    const legacyPath = path.join(STATE_DIR, STATE_FILE_NAME);
+    const raw = await fs.readFile(legacyPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if ("config" in parsed && "stats" in parsed && !("state" in parsed)) {
+      const migrated = parsed as YieldHunterState;
+      await writeState(migrated);
+      return migrated;
+    }
   } catch {
-    return { ...DEFAULT_STATE };
+    // No legacy file or parse failure — use defaults
   }
+
+  return { ...DEFAULT_STATE };
 }
 
 async function writeState(state: YieldHunterState): Promise<void> {
-  await ensureStateDir();
-  await fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+  await writeStateFile(STATE_FILE_NAME, STATE_VERSION, state);
 }
 
 async function readPid(): Promise<number | null> {
@@ -113,7 +125,7 @@ async function readPid(): Promise<number | null> {
 }
 
 async function writePid(pid: number): Promise<void> {
-  await ensureStateDir();
+  await fs.mkdir(STATE_DIR, { recursive: true });
   await fs.writeFile(PID_FILE, String(pid), "utf-8");
 }
 
