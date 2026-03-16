@@ -1,6 +1,6 @@
 {
   "version": "0.23.1",
-  "generated": "2026-03-16T16:36:56.865Z",
+  "generated": "2026-03-16T16:39:06.567Z",
   "skills": [
     {
       "name": "agent-lookup",
@@ -1109,6 +1109,32 @@
         "get_token_info",
         "list_user_tokens",
         "get_token_holders"
+      ]
+    },
+    {
+      "name": "transfer",
+      "description": "STX, fungible token (SIP-010), and NFT (SIP-009) transfers on Stacks. All operations require an unlocked wallet.",
+      "entry": "transfer/transfer.ts",
+      "arguments": [
+        "stx",
+        "token",
+        "nft"
+      ],
+      "requires": [
+        "wallet"
+      ],
+      "tags": [
+        "l2",
+        "write",
+        "requires-funds"
+      ],
+      "userInvocable": false,
+      "author": "tfibtcagent",
+      "authorAgent": "Secret Dome",
+      "mcpTools": [
+        "transfer_stx",
+        "transfer_token",
+        "transfer_nft"
       ]
     },
     {
