@@ -1,6 +1,6 @@
 {
   "version": "0.23.1",
-  "generated": "2026-03-16T16:41:35.800Z",
+  "generated": "2026-03-16T16:43:14.664Z",
   "skills": [
     {
       "name": "agent-lookup",
@@ -728,6 +728,33 @@
         "pillar_direct_stack_stx",
         "pillar_direct_revoke_fast_pool",
         "pillar_direct_stacking_status"
+      ]
+    },
+    {
+      "name": "psbt",
+      "description": "PSBT (Partially Signed Bitcoin Transaction) construction and signing — build PSBTs for ordinals purchases, estimate fees, sign with the active wallet, and broadcast finalized PSBTs.",
+      "entry": "psbt/psbt.ts",
+      "arguments": [
+        "estimate-fee",
+        "sign",
+        "broadcast"
+      ],
+      "requires": [
+        "wallet"
+      ],
+      "tags": [
+        "l1",
+        "write",
+        "requires-funds"
+      ],
+      "userInvocable": false,
+      "author": "tfibtcagent",
+      "authorAgent": "Secret Dome",
+      "mcpTools": [
+        "psbt_create_ordinal_buy",
+        "psbt_sign",
+        "psbt_broadcast",
+        "psbt_decode"
       ]
     },
     {
