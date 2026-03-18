@@ -1,6 +1,6 @@
 {
   "version": "0.26.0",
-  "generated": "2026-03-18T06:47:34.914Z",
+  "generated": "2026-03-18T06:50:21.914Z",
   "skills": [
     {
       "name": "agent-lookup",
@@ -235,7 +235,7 @@
     },
     {
       "name": "btc",
-      "description": "Bitcoin L1 operations — check balances, estimate fees, list UTXOs, transfer BTC, and classify UTXOs as cardinal (safe to spend) or ordinal (contain inscriptions). Data sourced from mempool.space and the Hiro Ordinals API.",
+      "description": "Bitcoin L1 operations — check balances, estimate fees, list UTXOs, transfer BTC, and classify UTXOs as cardinal (safe to spend), ordinal (inscriptions), or rune (rune tokens). Data sourced from mempool.space and the Unisat API.",
       "entry": "btc/btc.ts",
       "arguments": [
         "balance",
@@ -244,6 +244,7 @@
         "transfer",
         "get-cardinal-utxos",
         "get-ordinal-utxos",
+        "get-rune-utxos",
         "get-inscriptions"
       ],
       "requires": [
@@ -264,6 +265,7 @@
         "transfer_btc",
         "get_cardinal_utxos",
         "get_ordinal_utxos",
+        "get_rune_utxos",
         "get_inscriptions_by_address"
       ]
     },
@@ -711,14 +713,15 @@
     },
     {
       "name": "ordinals",
-      "description": "Bitcoin ordinals operations — get the Taproot receive address, estimate inscription fees, create inscriptions via the two-step commit/reveal pattern, and fetch existing inscription content from reveal transactions.",
+      "description": "Bitcoin ordinals operations — get the Taproot receive address, estimate inscription fees, create inscriptions via the two-step commit/reveal pattern, transfer inscriptions to new owners, and fetch existing inscription content from reveal transactions.",
       "entry": "ordinals/ordinals.ts",
       "arguments": [
         "get-taproot-address",
         "estimate-fee",
         "inscribe",
         "inscribe-reveal",
-        "get-inscription"
+        "get-inscription",
+        "transfer-inscription"
       ],
       "requires": [
         "wallet"
@@ -971,6 +974,27 @@
       "tags": [
         "l2",
         "write"
+      ],
+      "userInvocable": false,
+      "author": "whoabuddy",
+      "authorAgent": "Trustless Indra"
+    },
+    {
+      "name": "runes",
+      "description": "Bitcoin rune operations — check rune balances, list rune-bearing UTXOs, and transfer runes between addresses with Runestone OP_RETURN encoding. Uses the Unisat API for indexing.",
+      "entry": "runes/runes.ts",
+      "arguments": [
+        "balance",
+        "utxos",
+        "transfer"
+      ],
+      "requires": [
+        "wallet"
+      ],
+      "tags": [
+        "l1",
+        "write",
+        "requires-funds"
       ],
       "userInvocable": false,
       "author": "whoabuddy",

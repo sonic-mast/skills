@@ -4,3 +4,5 @@ export { MempoolApi, createMempoolApi, getMempoolApiUrl, getMempoolExplorerUrl, 
 export type { UTXO, FeeEstimates, FeeTiers } from "./mempool-api.js";
 export { getWalletManager } from "./wallet-manager.js";
 export type { WalletCreateResult, WalletImportResult } from "./wallet-manager.js";
+export { UnisatIndexer, UnisatApiError, createUnisatIndexer } from "./unisat-indexer.js";
+export type { UnisatInscription, UnisatRuneBalance, UnisatRuneUtxo, ClassifiedUtxos } from "./unisat-indexer.js";
