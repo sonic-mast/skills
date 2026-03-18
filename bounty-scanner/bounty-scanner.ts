@@ -9,28 +9,93 @@
 import { Command } from "commander";
 import { printJson, handleError } from "../src/lib/utils/cli.js";
 import { getWalletManager } from "../src/lib/services/wallet-manager.js";
-import { signMessageHashRsv } from "@stacks/transactions";
-import { hashMessage } from "@stacks/encryption";
-import { bytesToHex } from "@stacks/common";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 
 const BOUNTY_API =
-  process.env.BOUNTY_API_URL ?? "https://1btc-news-api.p-d07.workers.dev";
+  process.env.BOUNTY_API_URL ?? "https://bounty.drx4.xyz/api";
 
 // ---------------------------------------------------------------------------
-// Types
+// Types — aligned with bounty.drx4.xyz API
 // ---------------------------------------------------------------------------
 
 interface Bounty {
-  id: string;
+  id: number;
+  uuid: string;
+  creator_stx: string;
+  creator_name: string;
   title: string;
-  description?: string;
-  reward: number;
+  description: string;
+  amount_sats: number;
+  tags: string | null;
   status: string;
-  claimer?: string;
-  poster?: string;
-  created_at: number;
+  deadline: string | null;
+  claim_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BountyDetail {
+  bounty: Bounty;
+  claims: Claim[];
+  submissions: Submission[];
+  payments: Payment[];
+  actions: Record<string, ActionInfo>;
+}
+
+interface Claim {
+  id: number;
+  bounty_id: number;
+  claimer_btc: string;
+  claimer_stx: string | null;
+  claimer_name: string | null;
+  message: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Submission {
+  id: number;
+  claim_id: number;
+  bounty_id: number;
+  description: string;
+  proof_url: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Payment {
+  id: number;
+  bounty_id: number;
+  submission_id: number;
+  amount_sats: number;
+  txid: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ActionInfo {
+  method: string;
+  endpoint: string;
+  description: string;
+  required_fields: Record<string, string>;
+  optional_fields?: Record<string, string>;
+  signing_format: string;
+  note: string;
+}
+
+interface BountyStats {
+  total_bounties: number;
+  open_bounties: number;
+  completed_bounties: number;
+  cancelled_bounties: number;
+  total_agents: number;
+  total_paid_sats: number;
+  total_claims: number;
+  total_submissions: number;
 }
 
 interface SkillInfo {
@@ -43,11 +108,29 @@ interface SkillInfo {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function fetchBounties(): Promise<Bounty[]> {
-  const res = await fetch(`${BOUNTY_API}/bounties`);
+async function fetchBounties(
+  status: string = "all",
+  limit: number = 100
+): Promise<Bounty[]> {
+  const res = await fetch(
+    `${BOUNTY_API}/bounties?status=${status}&limit=${limit}`
+  );
   if (!res.ok) throw new Error(`Bounty API returned ${res.status}`);
   const data = (await res.json()) as { bounties?: Bounty[] };
   return data.bounties ?? [];
+}
+
+async function fetchBountyDetail(uuid: string): Promise<BountyDetail> {
+  const res = await fetch(`${BOUNTY_API}/bounties/${uuid}`);
+  if (!res.ok) throw new Error(`Bounty API returned ${res.status}`);
+  return (await res.json()) as BountyDetail;
+}
+
+async function fetchStats(): Promise<BountyStats> {
+  const res = await fetch(`${BOUNTY_API}/stats`);
+  if (!res.ok) throw new Error(`Bounty API returned ${res.status}`);
+  const data = (await res.json()) as { stats: BountyStats };
+  return data.stats;
 }
 
 function getStxAddress(address?: string): string {
@@ -59,46 +142,6 @@ function getStxAddress(address?: string): string {
     "No STX address provided and wallet is not unlocked. " +
       "Either provide --address or unlock your wallet first."
   );
-}
-
-/**
- * Get the active wallet account or throw a consistent error.
- */
-function requireUnlockedWallet() {
-  const walletManager = getWalletManager();
-  const account = walletManager.getActiveAccount();
-  if (!account) {
-    throw new Error(
-      "Wallet is not unlocked. Use wallet/wallet.ts unlock first."
-    );
-  }
-  return account;
-}
-
-/**
- * Sign a claim message proving control of the STX address.
- * Uses the Stacks message signing format (same as signing skill's stacks-sign).
- * Returns both the signature and the signed message so the server can verify.
- *
- * NOTE: The upstream bounty API at bounty.drx4.xyz uses BIP-322/BIP-137 BTC
- * signatures with format: "agent-bounties | claim-bounty | {btc_address} |
- * bounties/{uuid} | {timestamp}". This skill currently uses Stacks message
- * signing against a different API. Full alignment is tracked upstream.
- */
-function signClaimMessage(
-  bountyId: string,
-  stxAddress: string,
-  privateKey: string
-): { signature: string; message: string; timestamp: string } {
-  const timestamp = new Date().toISOString();
-  const message = `claim:${bountyId}:${stxAddress}:${timestamp}`;
-  const msgHash = hashMessage(message);
-  const msgHashHex = bytesToHex(msgHash);
-  const signature = signMessageHashRsv({
-    messageHash: msgHashHex,
-    privateKey,
-  });
-  return { signature, message, timestamp };
 }
 
 /**
@@ -224,10 +267,11 @@ function getInstalledSkills(): SkillInfo[] {
  * Returns 0-1 confidence score.
  */
 function scoreBountyMatch(
-  bounty: { title: string; description: string },
+  bounty: { title: string; description: string; tags: string | null },
   skills: SkillInfo[]
 ): { score: number; matchedSkills: string[]; reason: string } {
-  const bountyText = `${bounty.title} ${bounty.description}`.toLowerCase();
+  const bountyText =
+    `${bounty.title} ${bounty.description} ${bounty.tags ?? ""}`.toLowerCase();
   const matchedSkills: string[] = [];
   let score = 0;
 
@@ -251,7 +295,8 @@ function scoreBountyMatch(
   }
 
   // Bonus for wallet/signing only when bounty mentions payment or signing
-  const mentionsPayment = /pay|transfer|send|sats|btc|stx|sbtc|escrow|fund/i.test(bountyText);
+  const mentionsPayment =
+    /pay|transfer|send|sats|btc|stx|sbtc|escrow|fund/i.test(bountyText);
   const mentionsSigning = /sign|signature|verify|auth/i.test(bountyText);
   if (mentionsPayment && skills.some((s) => s.name === "wallet")) score += 0.1;
   if (mentionsSigning && skills.some((s) => s.name === "signing")) score += 0.1;
@@ -283,15 +328,17 @@ program
   .description("List all open bounties with rewards")
   .action(async () => {
     try {
-      const bounties = await fetchBounties();
-      const open = bounties
-        .filter((b) => b.status === "open")
-        .map((b) => ({
-          id: b.id,
-          title: b.title,
-          reward: b.reward,
-          posted: b.created_at,
-        }));
+      const bounties = await fetchBounties("open");
+      const open = bounties.map((b) => ({
+        uuid: b.uuid,
+        title: b.title,
+        amount_sats: b.amount_sats,
+        tags: b.tags,
+        deadline: b.deadline,
+        claim_count: b.claim_count,
+        creator_name: b.creator_name,
+        posted: b.created_at,
+      }));
 
       printJson({
         success: true,
@@ -309,20 +356,20 @@ program
   .description("Match open bounties to your installed skills")
   .action(async () => {
     try {
-      const bounties = await fetchBounties();
+      const bounties = await fetchBounties("open");
       const skills = getInstalledSkills();
-      const open = bounties.filter((b) => b.status === "open");
 
-      const matches = open
+      const matches = bounties
         .map((b) => {
           const match = scoreBountyMatch(
-            { title: b.title, description: b.description ?? "" },
+            { title: b.title, description: b.description, tags: b.tags },
             skills
           );
           return {
-            id: b.id,
+            uuid: b.uuid,
             title: b.title,
-            reward: b.reward,
+            amount_sats: b.amount_sats,
+            deadline: b.deadline,
             confidence: match.score,
             matchedSkills: match.matchedSkills,
             reason: match.reason,
@@ -337,13 +384,13 @@ program
       printJson({
         success: true,
         installedSkills: skills.length,
-        openBounties: open.length,
+        openBounties: bounties.length,
         recommendedBounties: recommended.length,
         matches: matches.slice(0, 10),
         note: "Display threshold: 0.3 (recommended). Auto-claim threshold: 0.7 (see AGENT.md).",
         action:
           recommended.length > 0
-            ? `Top match: "${recommended[0].title}" (${recommended[0].confidence * 100}% confidence, ${recommended[0].reward} sats)`
+            ? `Top match: "${recommended[0].title}" (${recommended[0].confidence * 100}% confidence, ${recommended[0].amount_sats} sats)`
             : "No strong matches found. Install more skills or check back later.",
       });
     } catch (err) {
@@ -354,46 +401,52 @@ program
 // -- claim ------------------------------------------------------------------
 program
   .command("claim")
-  .argument("<bounty-id>", "Bounty ID to claim")
-  .description("Claim a bounty for your agent (requires unlocked wallet)")
-  .action(async (bountyId: string) => {
+  .argument("<bounty-uuid>", "Bounty UUID to claim")
+  .option("--message <msg>", "Claim message describing your approach")
+  .description(
+    "Claim a bounty for your agent (requires BTC signing via signing skill)"
+  )
+  .action(async (bountyUuid: string, opts: { message?: string }) => {
     try {
-      const account = requireUnlockedWallet();
-      const stxAddress = account.address;
-      const { signature, message, timestamp } = signClaimMessage(
-        bountyId,
-        stxAddress,
-        account.privateKey
-      );
+      // Fetch bounty detail to get the signing format from actions
+      const detail = await fetchBountyDetail(bountyUuid);
 
-      const res = await fetch(`${BOUNTY_API}/bounties/${bountyId}/claim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          claimer: stxAddress,
-          signature,
-          message,
-          timestamp,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
+      if (detail.bounty.status !== "open") {
         printJson({
           success: false,
-          error: (data as Record<string, unknown>).error ?? `HTTP ${res.status}`,
-          bountyId,
+          error: `Bounty is not open (status: ${detail.bounty.status})`,
+          uuid: bountyUuid,
+        });
+        return;
+      }
+
+      // The API requires BIP-322/BIP-137 BTC signatures.
+      // Extract the signing format from the bounty's actions response.
+      const claimAction = detail.actions?.claim;
+      if (!claimAction) {
+        printJson({
+          success: false,
+          error:
+            "No claim action available for this bounty. It may already be fully claimed.",
+          uuid: bountyUuid,
         });
         return;
       }
 
       printJson({
         success: true,
-        bountyId,
-        claimer: stxAddress,
-        message: "Bounty claimed. Start building and submit your PR.",
-        ...(data as object),
+        claimed: false,
+        next_action: "sign_and_submit",
+        uuid: bountyUuid,
+        title: detail.bounty.title,
+        amount_sats: detail.bounty.amount_sats,
+        endpoint: claimAction.endpoint,
+        method: claimAction.method,
+        signing_format: claimAction.signing_format,
+        required_fields: claimAction.required_fields,
+        optional_fields: claimAction.optional_fields,
+        note: "Use the signing skill to create a BIP-322 or BIP-137 signature with the signing_format above, then POST to the endpoint with the required fields.",
+        message: opts.message,
       });
     } catch (err) {
       handleError(err);
@@ -403,26 +456,15 @@ program
 // -- status -----------------------------------------------------------------
 program
   .command("status")
-  .description("Bounty board health — open, claimed, completed counts")
+  .description("Bounty board health — stats from the API")
   .action(async () => {
     try {
-      const bounties = await fetchBounties();
-
-      const stats = {
-        total: bounties.length,
-        open: bounties.filter((b) => b.status === "open").length,
-        claimed: bounties.filter((b) => b.status === "claimed").length,
-        completed: bounties.filter((b) => b.status === "completed").length,
-        cancelled: bounties.filter((b) => b.status === "cancelled").length,
-        totalRewardsOpen: bounties
-          .filter((b) => b.status === "open")
-          .reduce((sum, b) => sum + (b.reward ?? 0), 0),
-      };
+      const stats = await fetchStats();
 
       printJson({
         success: true,
         ...stats,
-        summary: `${stats.open} open bounties worth ${stats.totalRewardsOpen.toLocaleString()} sats`,
+        summary: `${stats.open_bounties} open bounties | ${stats.total_agents} agents | ${stats.total_paid_sats.toLocaleString()} sats paid out`,
       });
     } catch (err) {
       handleError(err);
@@ -432,29 +474,82 @@ program
 // -- my-bounties ------------------------------------------------------------
 program
   .command("my-bounties")
-  .description("List bounties you have claimed or posted")
+  .description("List bounties you have created")
   .option("--address <stx>", "Your STX address")
   .action(async (opts: { address?: string }) => {
     try {
       const stxAddress = getStxAddress(opts.address);
       const bounties = await fetchBounties();
 
-      const mine = bounties.filter(
-        (b) => b.claimer === stxAddress || b.poster === stxAddress
-      );
+      // Filter bounties where the user is the creator
+      const created = bounties.filter((b) => b.creator_stx === stxAddress);
 
+      // For claims, we need to check each bounty's detail — but that's expensive.
+      // Instead, list created bounties and note that claim lookup requires detail fetches.
       printJson({
         success: true,
         agent: stxAddress,
-        claimed: mine.filter((b) => b.claimer === stxAddress).length,
-        posted: mine.filter((b) => b.poster === stxAddress).length,
-        bounties: mine.map((b) => ({
-          id: b.id,
+        created: created.length,
+        bounties: created.map((b) => ({
+          uuid: b.uuid,
           title: b.title,
           status: b.status,
-          reward: b.reward,
-          role: b.claimer === stxAddress ? "claimer" : "poster",
+          amount_sats: b.amount_sats,
+          claim_count: b.claim_count,
+          role: "creator",
         })),
+        note: "Shows bounties where you are the creator. Claim history requires checking individual bounty details.",
+      });
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// -- detail -----------------------------------------------------------------
+program
+  .command("detail")
+  .argument("<bounty-uuid>", "Bounty UUID")
+  .description("Get full bounty details including claims, submissions, and available actions")
+  .action(async (bountyUuid: string) => {
+    try {
+      const detail = await fetchBountyDetail(bountyUuid);
+
+      printJson({
+        success: true,
+        bounty: {
+          uuid: detail.bounty.uuid,
+          title: detail.bounty.title,
+          description: detail.bounty.description,
+          amount_sats: detail.bounty.amount_sats,
+          status: detail.bounty.status,
+          tags: detail.bounty.tags,
+          deadline: detail.bounty.deadline,
+          creator_name: detail.bounty.creator_name,
+          creator_stx: detail.bounty.creator_stx,
+          claim_count: detail.bounty.claim_count,
+          created_at: detail.bounty.created_at,
+        },
+        claims: detail.claims.map((c) => ({
+          claimer_btc: c.claimer_btc,
+          claimer_stx: c.claimer_stx,
+          claimer_name: c.claimer_name,
+          message: c.message,
+          status: c.status,
+          created_at: c.created_at,
+        })),
+        submissions: detail.submissions.map((s) => ({
+          description: s.description,
+          proof_url: s.proof_url,
+          status: s.status,
+          created_at: s.created_at,
+        })),
+        payments: detail.payments.map((p) => ({
+          amount_sats: p.amount_sats,
+          txid: p.txid,
+          status: p.status,
+          created_at: p.created_at,
+        })),
+        actions: Object.keys(detail.actions ?? {}),
       });
     } catch (err) {
       handleError(err);
