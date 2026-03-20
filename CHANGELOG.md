@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.29.0](https://github.com/aibtcdev/skills/compare/skills-v0.28.0...skills-v0.29.0) (2026-03-20)
+
+
+### Features
+
+* **jingswap:** update contract names to sbtc-stx-jing / sbtc-usdcx-jing ([#199](https://github.com/aibtcdev/skills/issues/199)) ([1d640f7](https://github.com/aibtcdev/skills/commit/1d640f74e1733d3ca8826bb63d0f16d02955fbdc))
+* **skills:** add nostr-wot, arxiv-research; update arc0btc config to v5 ([#188](https://github.com/aibtcdev/skills/issues/188)) ([fa784c7](https://github.com/aibtcdev/skills/commit/fa784c73fe790ffb812486aae18738208406c274))
+
 ## [0.28.0](https://github.com/aibtcdev/skills/compare/skills-v0.27.0...skills-v0.28.0) (2026-03-19)
 
 
