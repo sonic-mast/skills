@@ -10,9 +10,9 @@
 import { Command } from "commander";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { NETWORK, getMempoolTxUrl } from "../src/lib/config/networks.js";
+import { NETWORK } from "../src/lib/config/networks.js";
 import { getWalletManager } from "../src/lib/services/wallet-manager.js";
-import { MempoolApi } from "../src/lib/services/mempool-api.js";
+import { MempoolApi, getMempoolTxUrl } from "../src/lib/services/mempool-api.js";
 import {
   buildChildCommitTransaction,
   buildChildRevealTransaction,
@@ -266,7 +266,7 @@ program
         }
 
         // Validate parent ownership
-        const parentInfo = await lookupParentInscription(opts.parentId);
+        const parentInfo = await lookupParentInscription(opts.parentId, NETWORK);
         if (parentInfo.address !== sessionInfo.taprootAddress) {
           throw new Error(
             `Parent inscription is owned by ${parentInfo.address}, ` +
@@ -422,7 +422,7 @@ program
         }
 
         // Validate parent is still owned by this wallet
-        const parentInfo = await lookupParentInscription(state.parentInscriptionId);
+        const parentInfo = await lookupParentInscription(state.parentInscriptionId, NETWORK);
         if (parentInfo.address !== sessionInfo.taprootAddress) {
           throw new Error(
             `Parent inscription is no longer at your Taproot address. ` +
@@ -466,6 +466,7 @@ program
           recipientAddress: sessionInfo.taprootAddress,
           feeRate: actualFeeRate,
           network: NETWORK,
+          inscription,
         });
 
         // Sign both inputs:
