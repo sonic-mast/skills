@@ -185,20 +185,38 @@ function parseFrontmatter(content: string): SkillInfo | null {
   }
 
   const fields: Record<string, string> = {};
+  let inMetadata = false;
   for (const line of frontmatterLines) {
+    // Detect nested `metadata:` block (agentskills.io spec format)
+    if (line.trim() === "metadata:") {
+      inMetadata = true;
+      continue;
+    }
+    // Exit metadata block on next top-level key (no leading whitespace)
+    if (inMetadata && line.length > 0 && !line.startsWith(" ") && !line.startsWith("\t")) {
+      inMetadata = false;
+    }
     const colonIdx = line.indexOf(":");
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
     const value = line.slice(colonIdx + 1).trim();
-    fields[key] = value;
+    // Store with metadata. prefix when inside metadata block, plain otherwise
+    if (inMetadata) {
+      fields[`metadata.${key}`] = value;
+    } else {
+      fields[key] = value;
+    }
   }
 
   if (!fields.name) return null;
 
+  // Support both flat (legacy) and nested (agentskills.io) tag formats
+  const rawTags = fields["metadata.tags"] ?? fields.tags ?? "";
+
   return {
     name: fields.name,
-    description: fields.description ?? "",
-    tags: parseBracketList(fields.tags ?? "[]"),
+    description: fields.description ?? fields["metadata.description"] ?? "",
+    tags: parseBracketList(rawTags),
   };
 }
 
