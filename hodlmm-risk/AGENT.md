@@ -20,7 +20,7 @@ Monitors Bitflow DLMM pool volatility before liquidity operations. Read-only —
 |------|--------|
 | List available pools | `bun run hodlmm-risk/hodlmm-risk.ts list-pools` |
 | Check pool risk before adding liquidity | `bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id <id>` |
-| Check position health | `bun run hodlmm-risk/hodlmm-risk.ts assess-position --pool-id <id> --address <stx>` |
+| Check pool drift / bin health | `bun run hodlmm-risk/hodlmm-risk.ts assess-pool-drift --pool-id <id>` |
 | Scan all pools for crisis conditions | `bun run hodlmm-risk/hodlmm-risk.ts regime-history` |
 
 ## Pre-Liquidity Gate

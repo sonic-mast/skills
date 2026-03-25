@@ -233,7 +233,7 @@ program
       );
     } catch (err) {
       console.log(JSON.stringify({ success: false, error: String(err) }));
-      process.exit(1);
+      process.exit(0);
     }
   });
 
@@ -287,17 +287,20 @@ program
           error: String(err),
         })
       );
-      process.exit(1);
+      process.exit(0);
     }
   });
 
-// assess-position
+// assess-pool-drift
 program
-  .command("assess-position")
-  .description("Evaluate an LP position's drift and concentration risk.")
+  .command("assess-pool-drift")
+  .description(
+    "Evaluate pool-level bin drift and concentration risk. " +
+    "Note: Bitflow does not expose a per-address LP position endpoint; " +
+    "this is pool-level analysis only."
+  )
   .requiredOption("--pool-id <id>", "Pool ID")
-  .requiredOption("--address <stxAddress>", "Stacks address of the LP")
-  .action(async (opts: { poolId: string; address: string }) => {
+  .action(async (opts: { poolId: string }) => {
     try {
       const [detail, binsData] = await Promise.all([
         fetchPoolDetail(opts.poolId),
@@ -328,34 +331,34 @@ program
       if (driftPct < 0.2) {
         driftRisk = "low";
         recommendation = "hold";
-        reason = "Active bin near center of position range";
+        reason = "Active bin near center of pool liquidity range";
       } else if (driftPct < 0.5) {
         driftRisk = "medium";
         recommendation = "rebalance";
-        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from position center — consider rebalancing`;
+        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from pool liquidity center — consider rebalancing`;
       } else {
         driftRisk = "high";
         recommendation = "withdraw";
-        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from position center — high IL risk, consider withdrawing`;
+        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from pool liquidity center — high IL risk, consider withdrawing`;
       }
 
       console.log(
         JSON.stringify({
           success: true,
           poolId: opts.poolId,
-          address: opts.address,
           pair: `${detail.tokens.tokenX.symbol}/${detail.tokens.tokenY.symbol}`,
           activeBin,
-          positionRange: { minBin, maxBin, centerBin, rangeWidth },
+          poolRange: { minBin, maxBin, centerBin, rangeWidth },
           drift: { bins: drift, pct: Math.round(driftPct * 1000) / 1000, risk: driftRisk },
           recommendation,
           reason,
+          note: "Pool-level analysis only — Bitflow does not expose per-address LP position data.",
           fetchedAt: new Date().toISOString(),
         })
       );
     } catch (err) {
       console.log(JSON.stringify({ success: false, error: String(err) }));
-      process.exit(1);
+      process.exit(0);
     }
   });
 
@@ -417,7 +420,7 @@ program
       );
     } catch (err) {
       console.log(JSON.stringify({ success: false, error: String(err) }));
-      process.exit(1);
+      process.exit(0);
     }
   });
 

@@ -5,7 +5,7 @@ metadata:
   author: "sonic-mast"
   author-agent: "Sonic Mast"
   user-invocable: "false"
-  arguments: "list-pools | assess-pool | assess-position | regime-history"
+  arguments: "list-pools | assess-pool | assess-pool-drift | regime-history"
   entry: "hodlmm-risk/hodlmm-risk.ts"
   requires: ""
   tags: "l2, read"
@@ -82,24 +82,23 @@ bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id dlmm_2
 
 ---
 
-### assess-position
+### assess-pool-drift
 
-Score risk for a specific LP position (by wallet address and pool).
+Evaluate pool-level bin drift and concentration risk. Analyzes how far the active bin has drifted from the center of the pool's liquidity distribution.
+
+> **Note:** Bitflow does not expose a per-address LP position endpoint. This command performs pool-level analysis only. Rename from the previous `assess-position` command — the `--address` parameter has been removed.
 
 ```bash
-bun run hodlmm-risk/hodlmm-risk.ts assess-position \
-  --pool-id dlmm_2 \
-  --address SP...
+bun run hodlmm-risk/hodlmm-risk.ts assess-pool-drift --pool-id dlmm_2
 ```
 
 **Options:**
 - `--pool-id <id>` (required) — Pool ID
-- `--address <stxAddress>` (required) — Stacks address of the LP
 
 Evaluates:
-- **Active bin drift** — How far the current active bin has moved from the position's center
-- **Concentration risk** — Whether the position is over-concentrated in a narrow bin range
-- **Recommendation** — hold / withdraw / rebalance
+- **Active bin drift** — How far the current active bin has moved from the center of the pool's liquidity distribution
+- **Concentration risk** — Whether liquidity is concentrated in a narrow bin range
+- **Recommendation** — hold / rebalance / withdraw
 
 ---
 
