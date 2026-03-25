@@ -126,7 +126,7 @@ function computeRiskScore(
   // Bin spread: fraction of non-empty bins (inverted — more spread = safer)
   const totalBins = bins.length;
   const binSpreadRaw = totalBins > 0 ? nonEmptyBins.length / totalBins : 0;
-  const binSpreadRisk = 1 - Math.min(binSpreadRaw * 10, 1); // scale: 10% fill = 0 risk
+  const binSpreadRisk = 1 - Math.min(binSpreadRaw * 5, 1); // scale: 20% fill = 0 risk (multiplier 5 keeps metric meaningful)
 
   // Reserve imbalance
   let totalXUsd = 0;
@@ -398,9 +398,7 @@ program
       );
 
       const snapshot = results
-        .filter((r): r is PromiseFulfilledResult<ReturnType<typeof classifyRegime> extends infer _ ? {
-          poolId: string; pair: string; activeBin: number; volatilityScore: number; regime: Regime;
-        } : never> => r.status === "fulfilled")
+        .filter((r): r is PromiseFulfilledResult<{ poolId: string; pair: string; activeBin: number; binStep: number; volatilityScore: number; regime: Regime }> => r.status === "fulfilled")
         .map((r) => r.value)
         .sort((a, b) => b.volatilityScore - a.volatilityScore);
 
