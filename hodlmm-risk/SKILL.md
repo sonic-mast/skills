@@ -84,7 +84,7 @@ bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id dlmm_2
 
 ### assess-position
 
-Score risk for a specific LP position (by wallet address and pool).
+Score risk for a specific LP position (by wallet address and pool). Fetches the LP's actual bin range from the Bitflow BFF API to compute drift against their real position boundaries, not the overall pool distribution.
 
 ```bash
 bun run hodlmm-risk/hodlmm-risk.ts assess-position \
@@ -97,9 +97,11 @@ bun run hodlmm-risk/hodlmm-risk.ts assess-position \
 - `--address <stxAddress>` (required) — Stacks address of the LP
 
 Evaluates:
-- **Active bin drift** — How far the current active bin has moved from the position's center
-- **Concentration risk** — Whether the position is over-concentrated in a narrow bin range
-- **Recommendation** — hold / withdraw / rebalance
+- **Active bin drift** — How far the current active bin has moved from the center of the LP's actual position range (`minBin`/`maxBin` from on-chain position data)
+- **Concentration risk** — Whether the position spans very few bins (narrow-range = higher IL sensitivity)
+- **Recommendation** — `hold` / `rebalance` / `withdraw`
+
+Returns an error (exit 0) if no active position is found for the given address in this pool.
 
 ---
 
@@ -121,11 +123,13 @@ The composite volatility score weights three signals:
 
 | Metric | Weight | Description |
 |--------|--------|-------------|
-| Bin spread | 30% | Non-empty bins / total bins. Low spread = high risk. |
+| Bin spread | 30% | Non-empty bins / total bins. Low spread = high risk. Threshold: ≥20% fill → 0 spread risk. |
 | Reserve imbalance | 40% | \|reserveX_usd - reserveY_usd\| / total. High imbalance = high risk. |
 | Active bin concentration | 30% | Active bin liquidity / total liquidity. High concentration = high risk. |
 
 All metrics are normalized 0-1 before weighting. Final score = weighted sum × 100.
+
+**bin_step scaling:** Wider bin steps amplify per-drift price impact. The score is scaled up by up to +25% for pools with large `bin_step` values (≥201 bps).
 
 ---
 

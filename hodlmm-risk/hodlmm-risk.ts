@@ -11,7 +11,6 @@
 import { Command } from "commander";
 
 const HODLMM_API_BASE = "https://bff.bitflowapis.finance";
-const PRICE_SCALE = 1e8; // prices are in 1e8 fixed point
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +46,20 @@ interface HodlmmBin {
   reserve_y: string;
   price: string;
   liquidity: string;
+}
+
+interface HodlmmUserPositionBin {
+  bin_id: number;
+  price?: string | null;
+  reserve_x?: string | null;
+  reserve_y?: string | null;
+  liquidity?: string | null;
+  user_liquidity?: string | number | null;
+}
+
+interface HodlmmUserPositionBinsResponse {
+  bins: HodlmmUserPositionBin[];
+  [key: string]: unknown;
 }
 
 type Regime = "calm" | "elevated" | "crisis";
@@ -95,6 +108,29 @@ async function fetchBins(poolId: string): Promise<{ bins: HodlmmBin[]; active_bi
   };
 }
 
+async function fetchUserPositionBins(
+  address: string,
+  poolId: string
+): Promise<HodlmmUserPositionBinsResponse> {
+  const res = await fetch(
+    `${HODLMM_API_BASE}/api/app/v1/users/${address}/positions/${poolId}/bins`
+  );
+  if (!res.ok)
+    throw new Error(`Failed to fetch position bins for ${address}/${poolId}: ${res.status}`);
+  const data = (await res.json()) as {
+    bins?: HodlmmUserPositionBin[];
+    position_bins?: HodlmmUserPositionBin[];
+    positions?: { bins?: HodlmmUserPositionBin[] };
+  };
+  // Normalize various response shapes from the BFF API
+  const bins =
+    Array.isArray(data.bins) ? data.bins
+    : Array.isArray(data.position_bins) ? data.position_bins
+    : Array.isArray(data.positions?.bins) ? data.positions.bins
+    : [];
+  return { ...data, bins };
+}
+
 function shortName(contract: string): string {
   const parts = contract.split(".");
   return parts[parts.length - 1] ?? contract;
@@ -107,6 +143,8 @@ function shortName(contract: string): string {
  * - Bin spread (30%): fraction of bins with liquidity. Low spread = high risk.
  * - Reserve imbalance (40%): |X_usd - Y_usd| / total_usd. High = skewed pool.
  * - Active bin concentration (30%): active bin liquidity / total. High = IL risk.
+ *
+ * bin_step adjustment: wider bin steps amplify drift risk (up to +25% for wide steps).
  */
 function computeRiskScore(
   bins: HodlmmBin[],
@@ -114,7 +152,8 @@ function computeRiskScore(
   priceXUsd: number,
   priceYUsd: number,
   decimalsX: number,
-  decimalsY: number
+  decimalsY: number,
+  binStep: number = 1
 ): {
   score: number;
   binSpread: number;
@@ -126,9 +165,10 @@ function computeRiskScore(
   );
 
   // Bin spread: fraction of non-empty bins (inverted — more spread = safer)
+  // Multiplier of 5: 20% bin fill → full safety (less aggressive than the old * 10)
   const totalBins = bins.length;
   const binSpreadRaw = totalBins > 0 ? nonEmptyBins.length / totalBins : 0;
-  const binSpreadRisk = 1 - Math.min(binSpreadRaw * 10, 1); // scale: 10% fill = 0 risk
+  const binSpreadRisk = 1 - Math.min(binSpreadRaw * 5, 1);
 
   // Reserve imbalance
   let totalXUsd = 0;
@@ -153,10 +193,14 @@ function computeRiskScore(
     activeBinConcentrationRisk = abUsd / totalUsd;
   }
 
-  // Weighted composite score
-  const score = Math.round(
-    (binSpreadRisk * 0.3 + reserveImbalanceRisk * 0.4 + activeBinConcentrationRisk * 0.3) * 100
-  );
+  // Weighted composite score (before bin_step adjustment)
+  const rawScore =
+    (binSpreadRisk * 0.3 + reserveImbalanceRisk * 0.4 + activeBinConcentrationRisk * 0.3) * 100;
+
+  // bin_step scaling: wider bins amplify price impact per drift unit.
+  // Scale: +0% at binStep ≤ 1 bps, +25% at binStep ≥ 201 bps.
+  const binStepFactor = 1 + Math.min((binStep - 1) / 200, 0.25);
+  const score = Math.round(rawScore * binStepFactor);
 
   return {
     score: Math.min(100, Math.max(0, score)),
@@ -246,9 +290,10 @@ program
   .requiredOption("--pool-id <id>", "Pool ID (e.g. dlmm_2)")
   .action(async (opts: { poolId: string }) => {
     try {
-      const [detail, binsData] = await Promise.all([
+      const [detail, binsData, allPools] = await Promise.all([
         fetchPoolDetail(opts.poolId),
         fetchBins(opts.poolId),
+        fetchPools(),
       ]);
 
       const { bins } = binsData;
@@ -256,11 +301,11 @@ program
       const priceYUsd = detail.tokens.tokenY.priceUsd ?? 0;
       const decimalsX = detail.tokens.tokenX.decimals ?? 8;
       const decimalsY = detail.tokens.tokenY.decimals ?? 6;
-      // active_bin_id comes from the bins API response
       const activeBin = binsData.active_bin_id || detail.activeBin || 0;
+      const binStep = allPools.find((p) => p.pool_id === opts.poolId)?.bin_step ?? 1;
 
       const { score, binSpread, reserveImbalance, activeBinConcentration } =
-        computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY);
+        computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY, binStep);
 
       const regime = classifyRegime(score);
       const metrics = { binSpread, reserveImbalance, activeBinConcentration };
@@ -278,48 +323,70 @@ program
 
       console.log(JSON.stringify({ success: true, ...result }));
     } catch (err) {
-      // Fail safe: return crisis on API error
+      // Fail safe: return crisis on API error — exit 0 so callers read the JSON
       console.log(
         JSON.stringify({
           success: false,
           poolId: opts.poolId,
           regime: "crisis",
           volatilityScore: 100,
-          signals: { recommendation: "stop", maxExposurePct: 0, reason: `API unreachable — defaulting to safe mode: ${String(err)}` },
+          signals: {
+            recommendation: "stop",
+            maxExposurePct: 0,
+            reason: `API unreachable — defaulting to safe mode: ${String(err)}`,
+          },
           error: String(err),
         })
       );
-      process.exit(1);
     }
   });
 
 // assess-position
 program
   .command("assess-position")
-  .description("Evaluate an LP position's drift and concentration risk.")
+  .description(
+    "Evaluate drift and concentration risk for a specific LP position. " +
+      "Fetches the actual bin range for the address's position in the pool."
+  )
   .requiredOption("--pool-id <id>", "Pool ID")
   .requiredOption("--address <stxAddress>", "Stacks address of the LP")
   .action(async (opts: { poolId: string; address: string }) => {
     try {
-      const [detail, binsData] = await Promise.all([
+      const [detail, binsData, positionData] = await Promise.all([
         fetchPoolDetail(opts.poolId),
         fetchBins(opts.poolId),
+        fetchUserPositionBins(opts.address, opts.poolId),
       ]);
 
-      const { bins } = binsData;
       const activeBin = binsData.active_bin_id || detail.activeBin || 0;
-      const nonEmptyBins = bins.filter(
-        (b) => parseFloat(b.reserve_x) > 0 || parseFloat(b.reserve_y) > 0
+
+      // Use the LP's actual position bins to determine their range
+      const positionBins = positionData.bins.filter(
+        (b) =>
+          b.user_liquidity !== null &&
+          b.user_liquidity !== undefined &&
+          Number(b.user_liquidity) > 0
       );
 
-      // Compute bin range center
-      const binIds = nonEmptyBins.map((b) => b.bin_id).sort((a, b) => a - b);
-      const minBin = binIds[0] ?? activeBin;
-      const maxBin = binIds[binIds.length - 1] ?? activeBin;
+      if (positionBins.length === 0) {
+        console.log(
+          JSON.stringify({
+            success: false,
+            poolId: opts.poolId,
+            address: opts.address,
+            error: "No active position found for this address in the given pool",
+          })
+        );
+        return;
+      }
+
+      const binIds = positionBins.map((b) => b.bin_id).sort((a, b) => a - b);
+      const minBin = binIds[0]!;
+      const maxBin = binIds[binIds.length - 1]!;
       const centerBin = Math.round((minBin + maxBin) / 2);
       const rangeWidth = maxBin - minBin;
 
-      // Drift: how far active bin has moved from center of liquidity range
+      // Drift: how far active bin has moved from the center of this LP's position range
       const drift = Math.abs(activeBin - centerBin);
       const driftPct = rangeWidth > 0 ? drift / rangeWidth : 0;
 
@@ -341,6 +408,9 @@ program
         reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from position center — high IL risk, consider withdrawing`;
       }
 
+      // Concentration: how many bins hold the position (narrow = more concentrated)
+      const concentrationRisk = positionBins.length <= 3 ? "high" : positionBins.length <= 10 ? "medium" : "low";
+
       console.log(
         JSON.stringify({
           success: true,
@@ -348,16 +418,27 @@ program
           address: opts.address,
           pair: `${detail.tokens.tokenX.symbol}/${detail.tokens.tokenY.symbol}`,
           activeBin,
-          positionRange: { minBin, maxBin, centerBin, rangeWidth },
+          positionRange: { minBin, maxBin, centerBin, rangeWidth, binCount: positionBins.length },
           drift: { bins: drift, pct: Math.round(driftPct * 1000) / 1000, risk: driftRisk },
+          concentrationRisk,
           recommendation,
           reason,
           fetchedAt: new Date().toISOString(),
         })
       );
     } catch (err) {
-      console.log(JSON.stringify({ success: false, error: String(err) }));
-      process.exit(1);
+      // Fail safe: return crisis-equivalent on API error — exit 0 so callers read the JSON
+      console.log(
+        JSON.stringify({
+          success: false,
+          poolId: opts.poolId,
+          address: opts.address,
+          drift: { risk: "high" },
+          recommendation: "withdraw",
+          reason: `API unreachable — defaulting to safe mode: ${String(err)}`,
+          error: String(err),
+        })
+      );
     }
   });
 
@@ -384,22 +465,32 @@ program
           const decimalsY = detail.tokens.tokenY.decimals ?? 6;
           const activeBin = binsData.active_bin_id || detail.activeBin || pool.active_bin;
 
-          const { score } = computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY);
+          const { score } = computeRiskScore(
+            bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY, pool.bin_step
+          );
 
           return {
             poolId: pool.pool_id,
             pair: `${detail.tokens.tokenX.symbol}/${detail.tokens.tokenY.symbol}`,
             activeBin,
+            binStep: pool.bin_step,
             volatilityScore: score,
             regime: classifyRegime(score),
           };
         })
       );
 
+      type PoolSnapshot = {
+        poolId: string;
+        pair: string;
+        activeBin: number;
+        binStep: number;
+        volatilityScore: number;
+        regime: Regime;
+      };
+
       const snapshot = results
-        .filter((r): r is PromiseFulfilledResult<ReturnType<typeof classifyRegime> extends infer _ ? {
-          poolId: string; pair: string; activeBin: number; volatilityScore: number; regime: Regime;
-        } : never> => r.status === "fulfilled")
+        .filter((r): r is PromiseFulfilledResult<PoolSnapshot> => r.status === "fulfilled")
         .map((r) => r.value)
         .sort((a, b) => b.volatilityScore - a.volatilityScore);
 
@@ -418,8 +509,17 @@ program
         })
       );
     } catch (err) {
-      console.log(JSON.stringify({ success: false, error: String(err) }));
-      process.exit(1);
+      // Fail safe: return crisis summary on API error — exit 0 so callers read the JSON
+      console.log(
+        JSON.stringify({
+          success: false,
+          regime: "crisis",
+          summary: { crisis: -1, elevated: 0, calm: 0 },
+          pools: [],
+          reason: `API unreachable — defaulting to safe mode: ${String(err)}`,
+          error: String(err),
+        })
+      );
     }
   });
 
