@@ -16,7 +16,6 @@
  *   arc creds set --service maximumsats-wot --key l402-token --value "<token>:<preimage>"
  */
 
-import { getCredential } from "../credentials/store.js";
 
 const BASE_URL = "https://wot.klabo.world";
 
@@ -38,17 +37,11 @@ function parseFlags(args: string[]): Record<string, string> {
 
 async function buildHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
-  // Prefer env var, fall back to encrypted credential store
+  // Use env var for L402 token — credential store API requires master password
+  // so is not suitable for headless CLI use. Set MAXIMUMSATS_L402_TOKEN for paid tier.
   const envToken = process.env.MAXIMUMSATS_L402_TOKEN;
   if (envToken) {
     headers["Authorization"] = `L402 ${envToken}`;
-    return headers;
-  }
-  try {
-    const token = await getCredential("maximumsats-wot", "l402-token");
-    if (token) headers["Authorization"] = `L402 ${token}`;
-  } catch {
-    // No credential stored — proceed with free tier
   }
   return headers;
 }
