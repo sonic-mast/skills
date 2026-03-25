@@ -8,7 +8,7 @@ metadata:
   arguments: "list-pools | assess-pool | assess-position | regime-history"
   entry: "hodlmm-risk/hodlmm-risk.ts"
   requires: ""
-  tags: "l2, read"
+  tags: "l2, read-only"
 ---
 
 # HODLMM Risk — Volatility Monitor for Bitflow DLMM Pools
