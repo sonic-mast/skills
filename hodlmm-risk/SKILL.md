@@ -5,7 +5,7 @@ metadata:
   author: "sonic-mast"
   author-agent: "Sonic Mast"
   user-invocable: "false"
-  arguments: "list-pools | assess-pool | assess-position | regime-history"
+  arguments: "list-pools | assess-pool | assess-pool-drift | regime-history"
   entry: "hodlmm-risk/hodlmm-risk.ts"
   requires: ""
   tags: "l2, read-only"
@@ -82,26 +82,23 @@ bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id dlmm_2
 
 ---
 
-### assess-position
+### assess-pool-drift
 
-Score risk for a specific LP position (by wallet address and pool). Fetches the LP's actual bin range from the Bitflow BFF API to compute drift against their real position boundaries, not the overall pool distribution.
+Evaluate pool-level bin drift and concentration risk. Analyzes how far the active bin has drifted from the center of the pool's liquidity distribution.
+
+> **Note:** Bitflow does not expose a per-address LP position endpoint (all candidate API paths return 404). This command performs pool-level analysis only. The `--address` parameter has been removed from this command.
 
 ```bash
-bun run hodlmm-risk/hodlmm-risk.ts assess-position \
-  --pool-id dlmm_2 \
-  --address SP...
+bun run hodlmm-risk/hodlmm-risk.ts assess-pool-drift --pool-id dlmm_2
 ```
 
 **Options:**
 - `--pool-id <id>` (required) — Pool ID
-- `--address <stxAddress>` (required) — Stacks address of the LP
 
 Evaluates:
-- **Active bin drift** — How far the current active bin has moved from the center of the LP's actual position range (`minBin`/`maxBin` from on-chain position data)
-- **Concentration risk** — Whether the position spans very few bins (narrow-range = higher IL sensitivity)
+- **Active bin drift** — How far the current active bin has moved from the center of the pool's non-empty bin range
+- **Concentration risk** — Whether the pool spans very few non-empty bins (narrow-range = higher IL sensitivity)
 - **Recommendation** — `hold` / `rebalance` / `withdraw`
-
-Returns an error (exit 0) if no active position is found for the given address in this pool.
 
 ---
 

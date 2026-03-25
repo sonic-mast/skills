@@ -48,20 +48,6 @@ interface HodlmmBin {
   liquidity: string;
 }
 
-interface HodlmmUserPositionBin {
-  bin_id: number;
-  price?: string | null;
-  reserve_x?: string | null;
-  reserve_y?: string | null;
-  liquidity?: string | null;
-  user_liquidity?: string | number | null;
-}
-
-interface HodlmmUserPositionBinsResponse {
-  bins: HodlmmUserPositionBin[];
-  [key: string]: unknown;
-}
-
 type Regime = "calm" | "elevated" | "crisis";
 
 interface RiskAssessment {
@@ -106,29 +92,6 @@ async function fetchBins(poolId: string): Promise<{ bins: HodlmmBin[]; active_bi
     bins: Array.isArray(data.bins) ? data.bins : [],
     active_bin_id: data.active_bin_id ?? 0,
   };
-}
-
-async function fetchUserPositionBins(
-  address: string,
-  poolId: string
-): Promise<HodlmmUserPositionBinsResponse> {
-  const res = await fetch(
-    `${HODLMM_API_BASE}/api/app/v1/users/${address}/positions/${poolId}/bins`
-  );
-  if (!res.ok)
-    throw new Error(`Failed to fetch position bins for ${address}/${poolId}: ${res.status}`);
-  const data = (await res.json()) as {
-    bins?: HodlmmUserPositionBin[];
-    position_bins?: HodlmmUserPositionBin[];
-    positions?: { bins?: HodlmmUserPositionBin[] };
-  };
-  // Normalize various response shapes from the BFF API
-  const bins =
-    Array.isArray(data.bins) ? data.bins
-    : Array.isArray(data.position_bins) ? data.position_bins
-    : Array.isArray(data.positions?.bins) ? data.positions.bins
-    : [];
-  return { ...data, bins };
 }
 
 function shortName(contract: string): string {
@@ -279,7 +242,7 @@ program
       );
     } catch (err) {
       console.log(JSON.stringify({ success: false, error: String(err) }));
-      process.exit(1);
+      process.exit(0);
     }
   });
 
@@ -341,52 +304,38 @@ program
     }
   });
 
-// assess-position
+// assess-pool-drift
+// Note: bff.bitflowapis.finance does not expose a per-address LP position endpoint
+// (all candidate paths return 404). This command performs pool-level drift analysis only.
 program
-  .command("assess-position")
+  .command("assess-pool-drift")
   .description(
-    "Evaluate drift and concentration risk for a specific LP position. " +
-      "Fetches the actual bin range for the address's position in the pool."
+    "Evaluate pool-level bin drift and concentration risk. " +
+      "Note: Bitflow does not expose a per-address LP position endpoint; " +
+      "this is pool-level analysis only."
   )
   .requiredOption("--pool-id <id>", "Pool ID")
-  .requiredOption("--address <stxAddress>", "Stacks address of the LP")
-  .action(async (opts: { poolId: string; address: string }) => {
+  .action(async (opts: { poolId: string }) => {
     try {
-      const [detail, binsData, positionData] = await Promise.all([
+      const [detail, binsData] = await Promise.all([
         fetchPoolDetail(opts.poolId),
         fetchBins(opts.poolId),
-        fetchUserPositionBins(opts.address, opts.poolId),
       ]);
 
       const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
+      const { bins } = binsData;
 
-      // Use the LP's actual position bins to determine their range
-      const positionBins = positionData.bins.filter(
-        (b) =>
-          b.user_liquidity !== null &&
-          b.user_liquidity !== undefined &&
-          Number(b.user_liquidity) > 0
+      const nonEmptyBins = bins.filter(
+        (b) => parseFloat(b.reserve_x) > 0 || parseFloat(b.reserve_y) > 0
       );
 
-      if (positionBins.length === 0) {
-        console.log(
-          JSON.stringify({
-            success: false,
-            poolId: opts.poolId,
-            address: opts.address,
-            error: "No active position found for this address in the given pool",
-          })
-        );
-        return;
-      }
-
-      const binIds = positionBins.map((b) => b.bin_id).sort((a, b) => a - b);
-      const minBin = binIds[0]!;
-      const maxBin = binIds[binIds.length - 1]!;
+      const binIds = nonEmptyBins.map((b) => b.bin_id).sort((a, b) => a - b);
+      const minBin = binIds[0] ?? activeBin;
+      const maxBin = binIds[binIds.length - 1] ?? activeBin;
       const centerBin = Math.round((minBin + maxBin) / 2);
       const rangeWidth = maxBin - minBin;
 
-      // Drift: how far active bin has moved from the center of this LP's position range
+      // Drift: how far active bin has moved from the center of pool's liquidity range
       const drift = Math.abs(activeBin - centerBin);
       const driftPct = rangeWidth > 0 ? drift / rangeWidth : 0;
 
@@ -397,32 +346,32 @@ program
       if (driftPct < 0.2) {
         driftRisk = "low";
         recommendation = "hold";
-        reason = "Active bin near center of position range";
+        reason = "Active bin near center of pool liquidity range";
       } else if (driftPct < 0.5) {
         driftRisk = "medium";
         recommendation = "rebalance";
-        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from position center — consider rebalancing`;
+        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from pool liquidity center — consider rebalancing`;
       } else {
         driftRisk = "high";
         recommendation = "withdraw";
-        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from position center — high IL risk, consider withdrawing`;
+        reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from pool liquidity center — high IL risk, consider withdrawing`;
       }
 
-      // Concentration: how many bins hold the position (narrow = more concentrated)
-      const concentrationRisk = positionBins.length <= 3 ? "high" : positionBins.length <= 10 ? "medium" : "low";
+      // Concentration: how many non-empty bins (narrow = more concentrated)
+      const concentrationRisk = nonEmptyBins.length <= 3 ? "high" : nonEmptyBins.length <= 10 ? "medium" : "low";
 
       console.log(
         JSON.stringify({
           success: true,
           poolId: opts.poolId,
-          address: opts.address,
           pair: `${detail.tokens.tokenX.symbol}/${detail.tokens.tokenY.symbol}`,
           activeBin,
-          positionRange: { minBin, maxBin, centerBin, rangeWidth, binCount: positionBins.length },
+          poolRange: { minBin, maxBin, centerBin, rangeWidth, nonEmptyBinCount: nonEmptyBins.length },
           drift: { bins: drift, pct: Math.round(driftPct * 1000) / 1000, risk: driftRisk },
           concentrationRisk,
           recommendation,
           reason,
+          note: "Pool-level analysis only — Bitflow does not expose per-address LP position data.",
           fetchedAt: new Date().toISOString(),
         })
       );
@@ -432,13 +381,13 @@ program
         JSON.stringify({
           success: false,
           poolId: opts.poolId,
-          address: opts.address,
           drift: { risk: "high" },
           recommendation: "withdraw",
           reason: `API unreachable — defaulting to safe mode: ${String(err)}`,
           error: String(err),
         })
       );
+      process.exit(0);
     }
   });
 
@@ -463,7 +412,7 @@ program
           const priceYUsd = detail.tokens.tokenY.priceUsd ?? 0;
           const decimalsX = detail.tokens.tokenX.decimals ?? 8;
           const decimalsY = detail.tokens.tokenY.decimals ?? 6;
-          const activeBin = binsData.active_bin_id || detail.activeBin || pool.active_bin;
+          const activeBin = binsData.active_bin_id ?? detail.activeBin ?? pool.active_bin;
 
           const { score } = computeRiskScore(
             bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY, pool.bin_step
