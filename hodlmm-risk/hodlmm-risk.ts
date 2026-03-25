@@ -11,8 +11,6 @@
 import { Command } from "commander";
 
 const HODLMM_API_BASE = "https://bff.bitflowapis.finance";
-const PRICE_SCALE = 1e8; // prices are in 1e8 fixed point
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface HodlmmPool {
@@ -257,7 +255,7 @@ program
       const decimalsX = detail.tokens.tokenX.decimals ?? 8;
       const decimalsY = detail.tokens.tokenY.decimals ?? 6;
       // active_bin_id comes from the bins API response
-      const activeBin = binsData.active_bin_id || detail.activeBin || 0;
+      const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
 
       const { score, binSpread, reserveImbalance, activeBinConcentration } =
         computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY);
@@ -307,7 +305,7 @@ program
       ]);
 
       const { bins } = binsData;
-      const activeBin = binsData.active_bin_id || detail.activeBin || 0;
+      const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
       const nonEmptyBins = bins.filter(
         (b) => parseFloat(b.reserve_x) > 0 || parseFloat(b.reserve_y) > 0
       );
@@ -382,7 +380,7 @@ program
           const priceYUsd = detail.tokens.tokenY.priceUsd ?? 0;
           const decimalsX = detail.tokens.tokenX.decimals ?? 8;
           const decimalsY = detail.tokens.tokenY.decimals ?? 6;
-          const activeBin = binsData.active_bin_id || detail.activeBin || pool.active_bin;
+          const activeBin = binsData.active_bin_id ?? detail.activeBin ?? pool.active_bin;
 
           const { score } = computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY);
 
