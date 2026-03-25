@@ -11,7 +11,6 @@
 import { Command } from "commander";
 
 const HODLMM_API_BASE = "https://bff.bitflowapis.finance";
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface HodlmmPool {
@@ -106,8 +105,6 @@ function shortName(contract: string): string {
  * - Bin spread (30%): fraction of bins with liquidity. Low spread = high risk.
  * - Reserve imbalance (40%): |X_usd - Y_usd| / total_usd. High = skewed pool.
  * - Active bin concentration (30%): active bin liquidity / total. High = IL risk.
- *
- * bin_step adjustment: wider bin steps amplify drift risk (up to +25% for wide steps).
  */
 function computeRiskScore(
   bins: HodlmmBin[],
@@ -115,8 +112,7 @@ function computeRiskScore(
   priceXUsd: number,
   priceYUsd: number,
   decimalsX: number,
-  decimalsY: number,
-  binStep: number = 1
+  decimalsY: number
 ): {
   score: number;
   binSpread: number;
@@ -128,10 +124,9 @@ function computeRiskScore(
   );
 
   // Bin spread: fraction of non-empty bins (inverted — more spread = safer)
-  // Multiplier of 5: 20% bin fill → full safety (less aggressive than the old * 10)
   const totalBins = bins.length;
   const binSpreadRaw = totalBins > 0 ? nonEmptyBins.length / totalBins : 0;
-  const binSpreadRisk = 1 - Math.min(binSpreadRaw * 5, 1);
+  const binSpreadRisk = 1 - Math.min(binSpreadRaw * 4, 1); // scale: 25% fill → full safety
 
   // Reserve imbalance
   let totalXUsd = 0;
@@ -156,14 +151,10 @@ function computeRiskScore(
     activeBinConcentrationRisk = abUsd / totalUsd;
   }
 
-  // Weighted composite score (before bin_step adjustment)
-  const rawScore =
-    (binSpreadRisk * 0.3 + reserveImbalanceRisk * 0.4 + activeBinConcentrationRisk * 0.3) * 100;
-
-  // bin_step scaling: wider bins amplify price impact per drift unit.
-  // Scale: +0% at binStep ≤ 1 bps, +25% at binStep ≥ 201 bps.
-  const binStepFactor = 1 + Math.min((binStep - 1) / 200, 0.25);
-  const score = Math.round(rawScore * binStepFactor);
+  // Weighted composite score
+  const score = Math.round(
+    (binSpreadRisk * 0.3 + reserveImbalanceRisk * 0.4 + activeBinConcentrationRisk * 0.3) * 100
+  );
 
   return {
     score: Math.min(100, Math.max(0, score)),
@@ -253,10 +244,9 @@ program
   .requiredOption("--pool-id <id>", "Pool ID (e.g. dlmm_2)")
   .action(async (opts: { poolId: string }) => {
     try {
-      const [detail, binsData, allPools] = await Promise.all([
+      const [detail, binsData] = await Promise.all([
         fetchPoolDetail(opts.poolId),
         fetchBins(opts.poolId),
-        fetchPools(),
       ]);
 
       const { bins } = binsData;
@@ -264,11 +254,11 @@ program
       const priceYUsd = detail.tokens.tokenY.priceUsd ?? 0;
       const decimalsX = detail.tokens.tokenX.decimals ?? 8;
       const decimalsY = detail.tokens.tokenY.decimals ?? 6;
+      // active_bin_id comes from the bins API response
       const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
-      const binStep = allPools.find((p) => p.pool_id === opts.poolId)?.bin_step ?? 1;
 
       const { score, binSpread, reserveImbalance, activeBinConcentration } =
-        computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY, binStep);
+        computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY);
 
       const regime = classifyRegime(score);
       const metrics = { binSpread, reserveImbalance, activeBinConcentration };
@@ -286,33 +276,28 @@ program
 
       console.log(JSON.stringify({ success: true, ...result }));
     } catch (err) {
-      // Fail safe: return crisis on API error — exit 0 so callers read the JSON
+      // Fail safe: return crisis on API error
       console.log(
         JSON.stringify({
           success: false,
           poolId: opts.poolId,
           regime: "crisis",
           volatilityScore: 100,
-          signals: {
-            recommendation: "stop",
-            maxExposurePct: 0,
-            reason: `API unreachable — defaulting to safe mode: ${String(err)}`,
-          },
+          signals: { recommendation: "stop", maxExposurePct: 0, reason: `API unreachable — defaulting to safe mode: ${String(err)}` },
           error: String(err),
         })
       );
+      process.exit(0);
     }
   });
 
 // assess-pool-drift
-// Note: bff.bitflowapis.finance does not expose a per-address LP position endpoint
-// (all candidate paths return 404). This command performs pool-level drift analysis only.
 program
   .command("assess-pool-drift")
   .description(
     "Evaluate pool-level bin drift and concentration risk. " +
-      "Note: Bitflow does not expose a per-address LP position endpoint; " +
-      "this is pool-level analysis only."
+    "Note: Bitflow does not expose a per-address LP position endpoint; " +
+    "this is pool-level analysis only."
   )
   .requiredOption("--pool-id <id>", "Pool ID")
   .action(async (opts: { poolId: string }) => {
@@ -322,20 +307,20 @@ program
         fetchBins(opts.poolId),
       ]);
 
-      const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
       const { bins } = binsData;
-
+      const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
       const nonEmptyBins = bins.filter(
         (b) => parseFloat(b.reserve_x) > 0 || parseFloat(b.reserve_y) > 0
       );
 
+      // Compute bin range center
       const binIds = nonEmptyBins.map((b) => b.bin_id).sort((a, b) => a - b);
       const minBin = binIds[0] ?? activeBin;
       const maxBin = binIds[binIds.length - 1] ?? activeBin;
       const centerBin = Math.round((minBin + maxBin) / 2);
       const rangeWidth = maxBin - minBin;
 
-      // Drift: how far active bin has moved from the center of pool's liquidity range
+      // Drift: how far active bin has moved from center of liquidity range
       const drift = Math.abs(activeBin - centerBin);
       const driftPct = rangeWidth > 0 ? drift / rangeWidth : 0;
 
@@ -357,18 +342,14 @@ program
         reason = `Active bin has drifted ${Math.round(driftPct * 100)}% from pool liquidity center — high IL risk, consider withdrawing`;
       }
 
-      // Concentration: how many non-empty bins (narrow = more concentrated)
-      const concentrationRisk = nonEmptyBins.length <= 3 ? "high" : nonEmptyBins.length <= 10 ? "medium" : "low";
-
       console.log(
         JSON.stringify({
           success: true,
           poolId: opts.poolId,
           pair: `${detail.tokens.tokenX.symbol}/${detail.tokens.tokenY.symbol}`,
           activeBin,
-          poolRange: { minBin, maxBin, centerBin, rangeWidth, nonEmptyBinCount: nonEmptyBins.length },
+          poolRange: { minBin, maxBin, centerBin, rangeWidth },
           drift: { bins: drift, pct: Math.round(driftPct * 1000) / 1000, risk: driftRisk },
-          concentrationRisk,
           recommendation,
           reason,
           note: "Pool-level analysis only — Bitflow does not expose per-address LP position data.",
@@ -376,17 +357,7 @@ program
         })
       );
     } catch (err) {
-      // Fail safe: return crisis-equivalent on API error — exit 0 so callers read the JSON
-      console.log(
-        JSON.stringify({
-          success: false,
-          poolId: opts.poolId,
-          drift: { risk: "high" },
-          recommendation: "withdraw",
-          reason: `API unreachable — defaulting to safe mode: ${String(err)}`,
-          error: String(err),
-        })
-      );
+      console.log(JSON.stringify({ success: false, error: String(err) }));
       process.exit(0);
     }
   });
@@ -414,32 +385,20 @@ program
           const decimalsY = detail.tokens.tokenY.decimals ?? 6;
           const activeBin = binsData.active_bin_id ?? detail.activeBin ?? pool.active_bin;
 
-          const { score } = computeRiskScore(
-            bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY, pool.bin_step
-          );
+          const { score } = computeRiskScore(bins, activeBin, priceXUsd, priceYUsd, decimalsX, decimalsY);
 
           return {
             poolId: pool.pool_id,
             pair: `${detail.tokens.tokenX.symbol}/${detail.tokens.tokenY.symbol}`,
             activeBin,
-            binStep: pool.bin_step,
             volatilityScore: score,
             regime: classifyRegime(score),
           };
         })
       );
 
-      type PoolSnapshot = {
-        poolId: string;
-        pair: string;
-        activeBin: number;
-        binStep: number;
-        volatilityScore: number;
-        regime: Regime;
-      };
-
       const snapshot = results
-        .filter((r): r is PromiseFulfilledResult<PoolSnapshot> => r.status === "fulfilled")
+        .filter((r): r is PromiseFulfilledResult<{ poolId: string; pair: string; activeBin: number; volatilityScore: number; regime: Regime }> => r.status === "fulfilled")
         .map((r) => r.value)
         .sort((a, b) => b.volatilityScore - a.volatilityScore);
 
@@ -469,6 +428,7 @@ program
           error: String(err),
         })
       );
+      process.exit(0);
     }
   });
 
