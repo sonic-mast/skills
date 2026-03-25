@@ -301,7 +301,7 @@ program
       const priceYUsd = detail.tokens.tokenY.priceUsd ?? 0;
       const decimalsX = detail.tokens.tokenX.decimals ?? 8;
       const decimalsY = detail.tokens.tokenY.decimals ?? 6;
-      const activeBin = binsData.active_bin_id || detail.activeBin || 0;
+      const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
       const binStep = allPools.find((p) => p.pool_id === opts.poolId)?.bin_step ?? 1;
 
       const { score, binSpread, reserveImbalance, activeBinConcentration } =
@@ -358,7 +358,7 @@ program
         fetchUserPositionBins(opts.address, opts.poolId),
       ]);
 
-      const activeBin = binsData.active_bin_id || detail.activeBin || 0;
+      const activeBin = binsData.active_bin_id ?? detail.activeBin ?? 0;
 
       // Use the LP's actual position bins to determine their range
       const positionBins = positionData.bins.filter(
