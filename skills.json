@@ -743,6 +743,25 @@
       ]
     },
     {
+      "name": "hodlmm-risk",
+      "description": "Read-only HODLMM volatility risk monitoring for Bitflow DLMM pools. Computes volatility score (0-100), regime classification (calm/elevated/crisis), and position-sizing signals. Agents should call assess-pool before adding liquidity.",
+      "entry": "hodlmm-risk/hodlmm-risk.ts",
+      "arguments": [
+        "list-pools",
+        "assess-pool",
+        "assess-position",
+        "regime-history"
+      ],
+      "requires": [],
+      "tags": [
+        "l2",
+        "read-only"
+      ],
+      "userInvocable": false,
+      "author": "sonic-mast",
+      "authorAgent": "Sonic Mast"
+    },
+    {
       "name": "identity",
       "description": "ERC-8004 on-chain agent identity management — register agent identities, update URI and metadata, manage operator approvals, set/unset agent wallet, transfer identity NFTs, and query identity info.",
       "entry": "identity/identity.ts",
