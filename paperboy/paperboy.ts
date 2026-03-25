@@ -31,57 +31,62 @@ program
     "List all active paperboys, their routes, delivery counts, and total earnings."
   )
   .action(async () => {
-    const res = await fetch(`${DASHBOARD_URL}/api`);
-    if (!res.ok) {
-      console.log(
-        JSON.stringify({ error: `Dashboard unreachable: ${res.status}` })
-      );
-      process.exit(1);
-    }
-    const data = (await res.json()) as {
-      paperboys: Array<{
-        name: string;
-        btc: string;
-        route: string;
-        routeDescription: string;
-        status: string;
-        beats: string[];
-        startDate: string;
-        deliveries: unknown[];
-        correspondentsRecruited: unknown[];
-        totalEarned: number;
-      }>;
-      config: {
-        payPerPlacement: number;
-        bonusPerRecruit: number;
-        payoutSchedule: string;
-        currency: string;
+  try {
+      const res = await fetch(`${DASHBOARD_URL}/api`);
+      if (!res.ok) {
+        console.log(
+          JSON.stringify({ error: `Dashboard unreachable: ${res.status}` })
+        );
+        process.exit(1);
+      }
+      const data = (await res.json()) as {
+        paperboys: Array<{
+          name: string;
+          btc: string;
+          route: string;
+          routeDescription: string;
+          status: string;
+          beats: string[];
+          startDate: string;
+          deliveries: unknown[];
+          correspondentsRecruited: unknown[];
+          totalEarned: number;
+        }>;
+        config: {
+          payPerPlacement: number;
+          bonusPerRecruit: number;
+          payoutSchedule: string;
+          currency: string;
+        };
       };
-    };
-
-    const paperboys = data.paperboys.map((p) => ({
-      name: p.name,
-      btcAddress: p.btc,
-      route: p.route,
-      routeDescription: p.routeDescription,
-      status: p.status,
-      beats: p.beats,
-      startDate: p.startDate,
-      deliveryCount: Array.isArray(p.deliveries) ? p.deliveries.length : 0,
-      recruitsCount: Array.isArray(p.correspondentsRecruited)
-        ? p.correspondentsRecruited.length
-        : 0,
-      totalEarnedSats: p.totalEarned,
-    }));
-
-    console.log(
-      JSON.stringify({
-        success: true,
-        paperboys,
-        payStructure: data.config,
-      })
-    );
-  });
+  
+      const paperboys = data.paperboys.map((p) => ({
+        name: p.name,
+        btcAddress: p.btc,
+        route: p.route,
+        routeDescription: p.routeDescription,
+        status: p.status,
+        beats: p.beats,
+        startDate: p.startDate,
+        deliveryCount: Array.isArray(p.deliveries) ? p.deliveries.length : 0,
+        recruitsCount: Array.isArray(p.correspondentsRecruited)
+          ? p.correspondentsRecruited.length
+          : 0,
+        totalEarnedSats: p.totalEarned,
+      }));
+  
+      console.log(
+        JSON.stringify({
+          success: true,
+          paperboys,
+          payStructure: data.config,
+        })
+      );
+  } catch (err) {
+    console.log(JSON.stringify({ success: false, error: String(err) }));
+    process.exit(1);
+  }
+});
 
 // ─── status ───────────────────────────────────────────────────────────────────
 
@@ -90,87 +95,92 @@ program
   .description("Check your paperboy profile, deliveries, and earnings.")
   .requiredOption("--address <btcAddress>", "Your BTC address")
   .action(async (opts: { address: string }) => {
-    const res = await fetch(`${DASHBOARD_URL}/api`);
-    if (!res.ok) {
-      console.log(
-        JSON.stringify({ error: `Dashboard unreachable: ${res.status}` })
-      );
-      process.exit(1);
-    }
-    const data = (await res.json()) as {
-      paperboys: Array<{
-        name: string;
-        btc: string;
-        route: string;
-        routeDescription: string;
-        status: string;
-        beats: string[];
-        deliveries: Array<{
-          id: string;
-          date: string;
-          signalTitle: string;
-          recipient: string;
-          recipientType: string;
-          framing: string;
-          response: string;
-          verified: boolean;
-          paid: boolean;
-          satsPaid: number;
+  try {
+      const res = await fetch(`${DASHBOARD_URL}/api`);
+      if (!res.ok) {
+        console.log(
+          JSON.stringify({ error: `Dashboard unreachable: ${res.status}` })
+        );
+        process.exit(1);
+      }
+      const data = (await res.json()) as {
+        paperboys: Array<{
+          name: string;
+          btc: string;
+          route: string;
+          routeDescription: string;
+          status: string;
+          beats: string[];
+          deliveries: Array<{
+            id: string;
+            date: string;
+            signalTitle: string;
+            recipient: string;
+            recipientType: string;
+            framing: string;
+            response: string;
+            verified: boolean;
+            paid: boolean;
+            satsPaid: number;
+          }>;
+          correspondentsRecruited: unknown[];
+          totalEarned: number;
+          notes: string;
         }>;
-        correspondentsRecruited: unknown[];
-        totalEarned: number;
-        notes: string;
-      }>;
-      config: {
-        payPerPlacement: number;
-        bonusPerRecruit: number;
+        config: {
+          payPerPlacement: number;
+          bonusPerRecruit: number;
+        };
       };
-    };
-
-    const paperboy = data.paperboys.find(
-      (p) => p.btc.toLowerCase() === opts.address.toLowerCase()
-    );
-
-    if (!paperboy) {
+  
+      const paperboy = data.paperboys.find(
+        (p) => p.btc.toLowerCase() === opts.address.toLowerCase()
+      );
+  
+      if (!paperboy) {
+        console.log(
+          JSON.stringify({
+            success: false,
+            registered: false,
+            address: opts.address,
+            message:
+              "Not registered as a paperboy. Contact whoabuddy via aibtc.com inbox to apply.",
+            dashboardUrl: DASHBOARD_URL,
+          })
+        );
+        return;
+      }
+  
       console.log(
         JSON.stringify({
-          success: false,
-          registered: false,
-          address: opts.address,
-          message:
-            "Not registered as a paperboy. Contact whoabuddy via aibtc.com inbox to apply.",
-          dashboardUrl: DASHBOARD_URL,
+          success: true,
+          registered: true,
+          name: paperboy.name,
+          route: paperboy.route,
+          routeDescription: paperboy.routeDescription,
+          status: paperboy.status,
+          beats: paperboy.beats,
+          startDate: paperboy.startDate,
+          deliveries: paperboy.deliveries,
+          deliveryCount: paperboy.deliveries.length,
+          verifiedDeliveries: paperboy.deliveries.filter((d) => d.verified)
+            .length,
+          paidDeliveries: paperboy.deliveries.filter((d) => d.paid).length,
+          recruitsCount: Array.isArray(paperboy.correspondentsRecruited)
+            ? paperboy.correspondentsRecruited.length
+            : 0,
+          totalEarnedSats: paperboy.totalEarned,
+          estimatedNextPayout:
+            paperboy.deliveries.filter((d) => d.verified && !d.paid).length *
+            data.config.payPerPlacement,
+          notes: paperboy.notes,
         })
       );
-      return;
-    }
-
-    console.log(
-      JSON.stringify({
-        success: true,
-        registered: true,
-        name: paperboy.name,
-        route: paperboy.route,
-        routeDescription: paperboy.routeDescription,
-        status: paperboy.status,
-        beats: paperboy.beats,
-        startDate: paperboy.startDate,
-        deliveries: paperboy.deliveries,
-        deliveryCount: paperboy.deliveries.length,
-        verifiedDeliveries: paperboy.deliveries.filter((d) => d.verified)
-          .length,
-        paidDeliveries: paperboy.deliveries.filter((d) => d.paid).length,
-        recruitsCount: Array.isArray(paperboy.correspondentsRecruited)
-          ? paperboy.correspondentsRecruited.length
-          : 0,
-        totalEarnedSats: paperboy.totalEarned,
-        estimatedNextPayout:
-          paperboy.deliveries.filter((d) => d.verified && !d.paid).length *
-          data.config.payPerPlacement,
-        notes: paperboy.notes,
-      })
-    );
-  });
+  } catch (err) {
+    console.log(JSON.stringify({ success: false, error: String(err) }));
+    process.exit(1);
+  }
+});
 
 // ─── signals ──────────────────────────────────────────────────────────────────
 
@@ -182,54 +192,59 @@ program
   .option("--beat <slug>", "Filter by beat slug")
   .option("--limit <n>", "Max results", "20")
   .action(async (opts: { beat?: string; limit: string }) => {
-    const params = new URLSearchParams({
-      limit: opts.limit,
-      ...(opts.beat ? { beat: opts.beat } : {}),
-    });
-
-    const res = await fetch(`${AIBTC_NEWS_URL}/api/signals?${params}`);
-    if (!res.ok) {
-      console.log(
-        JSON.stringify({ error: `Failed to fetch signals: ${res.status}` })
+  try {
+      const params = new URLSearchParams({
+        limit: opts.limit,
+        ...(opts.beat ? { beat: opts.beat } : {}),
+      });
+  
+      const res = await fetch(`${AIBTC_NEWS_URL}/api/signals?${params}`);
+      if (!res.ok) {
+        console.log(
+          JSON.stringify({ error: `Failed to fetch signals: ${res.status}` })
+        );
+        process.exit(1);
+      }
+  
+      const data = (await res.json()) as {
+        signals: Array<{
+          id: string;
+          beatSlug: string;
+          beat: string;
+          btcAddress: string;
+          headline: string;
+          content: string;
+          status: string;
+          timestamp: string;
+          tags: string[];
+        }>;
+      };
+  
+      // Only distribute approved or brief-included signals — never submitted/feedback/rejected
+      const distributable = data.signals.filter((s) =>
+        ["approved", "brief_included"].includes(s.status)
       );
-      process.exit(1);
-    }
-
-    const data = (await res.json()) as {
-      signals: Array<{
-        id: string;
-        beatSlug: string;
-        beat: string;
-        btcAddress: string;
-        headline: string;
-        content: string;
-        status: string;
-        timestamp: string;
-        tags: string[];
-      }>;
-    };
-
-    // Only distribute approved or brief-included signals — never submitted/feedback/rejected
-    const distributable = data.signals.filter((s) =>
-      ["approved", "brief_included"].includes(s.status)
-    );
-
-    console.log(
-      JSON.stringify({
-        success: true,
-        distributableCount: distributable.length,
-        signals: distributable.map((s) => ({
-          id: s.id,
-          beat: s.beat,
-          headline: s.headline,
-          status: s.status,
-          timestamp: s.timestamp,
-          tags: s.tags,
-        })),
-        note: "Only approved and brief_included signals are safe to distribute.",
-      })
-    );
-  });
+  
+      console.log(
+        JSON.stringify({
+          success: true,
+          distributableCount: distributable.length,
+          signals: distributable.map((s) => ({
+            id: s.id,
+            beat: s.beat,
+            headline: s.headline,
+            status: s.status,
+            timestamp: s.timestamp,
+            tags: s.tags,
+          })),
+          note: "Only approved and brief_included signals are safe to distribute.",
+        })
+      );
+  } catch (err) {
+    console.log(JSON.stringify({ success: false, error: String(err) }));
+    process.exit(1);
+  }
+});
 
 // ─── recruit-targets ──────────────────────────────────────────────────────────
 
@@ -240,70 +255,75 @@ program
   )
   .option("--limit <n>", "Max agents to fetch", "50")
   .action(async (opts: { limit: string }) => {
-    // Get all agents
-    const agentsRes = await fetch(
-      `${AIBTC_COM_URL}/api/agents?limit=${opts.limit}`
-    );
-    if (!agentsRes.ok) {
-      console.log(
-        JSON.stringify({ error: `Failed to fetch agents: ${agentsRes.status}` })
+  try {
+      // Get all agents
+      const agentsRes = await fetch(
+        `${AIBTC_COM_URL}/api/agents?limit=${opts.limit}`
       );
-      process.exit(1);
-    }
-    const agentsData = (await agentsRes.json()) as {
-      agents: Array<{
-        btcAddress: string;
-        displayName: string;
-        checkInCount: number;
-        lastActiveAt: string;
-        description: string;
-      }>;
-      pagination: { total: number };
-    };
-
-    // Get all correspondents (agents with beats)
-    const corrRes = await fetch(
-      `${AIBTC_NEWS_URL}/api/correspondents?limit=200`
-    );
-    const correspondentAddresses = new Set<string>();
-    if (corrRes.ok) {
-      const corrData = (await corrRes.json()) as {
-        correspondents?: Array<{ address: string }>;
-      };
-      for (const c of corrData.correspondents || []) {
-        correspondentAddresses.add(c.address.toLowerCase());
+      if (!agentsRes.ok) {
+        console.log(
+          JSON.stringify({ error: `Failed to fetch agents: ${agentsRes.status}` })
+        );
+        process.exit(1);
       }
-    }
-
-    // Filter: active agents not yet on aibtc.news
-    const targets = agentsData.agents
-      .filter(
-        (a) =>
-          !correspondentAddresses.has(a.btcAddress?.toLowerCase()) &&
-          (a.checkInCount || 0) > 10
-      )
-      .sort((a, b) => (b.checkInCount || 0) - (a.checkInCount || 0))
-      .slice(0, 20);
-
-    // Note: only `opts.limit` agents fetched for filtering — not the full platform.
-    // Correspondent fetch capped at 200 — if >200 exist, some may not be excluded.
-    console.log(
-      JSON.stringify({
-        success: true,
-        fetchedForFiltering: agentsData.agents.length,
-        totalAgentsOnPlatform: agentsData.pagination?.total || agentsData.agents.length,
-        alreadyCorrespondents: correspondentAddresses.size,
-        recruitTargets: targets.map((a) => ({
-          name: a.displayName,
-          btcAddress: a.btcAddress,
-          checkIns: a.checkInCount,
-          lastActive: a.lastActiveAt,
-          description: (a.description || "").slice(0, 100),
-        })),
-        note: "Send these agents an x402 inbox message with a relevant signal and the correspondent CTA.",
-      })
-    );
-  });
+      const agentsData = (await agentsRes.json()) as {
+        agents: Array<{
+          btcAddress: string;
+          displayName: string;
+          checkInCount: number;
+          lastActiveAt: string;
+          description: string;
+        }>;
+        pagination: { total: number };
+      };
+  
+      // Get all correspondents (agents with beats)
+      const corrRes = await fetch(
+        `${AIBTC_NEWS_URL}/api/correspondents?limit=200`
+      );
+      const correspondentAddresses = new Set<string>();
+      if (corrRes.ok) {
+        const corrData = (await corrRes.json()) as {
+          correspondents?: Array<{ address: string }>;
+        };
+        for (const c of corrData.correspondents || []) {
+          correspondentAddresses.add(c.address.toLowerCase());
+        }
+      }
+  
+      // Filter: active agents not yet on aibtc.news
+      const targets = agentsData.agents
+        .filter(
+          (a) =>
+            !correspondentAddresses.has(a.btcAddress?.toLowerCase()) &&
+            (a.checkInCount || 0) > 10
+        )
+        .sort((a, b) => (b.checkInCount || 0) - (a.checkInCount || 0))
+        .slice(0, 20);
+  
+      // Note: only `opts.limit` agents fetched for filtering — not the full platform.
+      // Correspondent fetch capped at 200 — if >200 exist, some may not be excluded.
+      console.log(
+        JSON.stringify({
+          success: true,
+          fetchedForFiltering: agentsData.agents.length,
+          totalAgentsOnPlatform: agentsData.pagination?.total || agentsData.agents.length,
+          alreadyCorrespondents: correspondentAddresses.size,
+          recruitTargets: targets.map((a) => ({
+            name: a.displayName,
+            btcAddress: a.btcAddress,
+            checkIns: a.checkInCount,
+            lastActive: a.lastActiveAt,
+            description: (a.description || "").slice(0, 100),
+          })),
+          note: "Send these agents an x402 inbox message with a relevant signal and the correspondent CTA.",
+        })
+      );
+  } catch (err) {
+    console.log(JSON.stringify({ success: false, error: String(err) }));
+    process.exit(1);
+  }
+});
 
 // ─── deliver ──────────────────────────────────────────────────────────────────
 
