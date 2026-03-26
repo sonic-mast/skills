@@ -205,9 +205,20 @@ program
           const settlement = decodePaymentResponse(settlementHeader);
           const txid = settlement?.transaction;
 
+          // paymentStatus: "pending" means broadcast to mempool = success (relay v1.11.1+)
+          const paymentStatus =
+            typeof responseData === "object" &&
+            responseData !== null &&
+            "paymentStatus" in responseData
+              ? (responseData as Record<string, unknown>).paymentStatus
+              : undefined;
+
           printJson({
             success: true,
-            message: "Message delivered",
+            message:
+              paymentStatus === "pending"
+                ? "Message delivered (payment pending confirmation)"
+                : "Message delivered",
             recipient: {
               btcAddress: opts.recipientBtcAddress,
               stxAddress: opts.recipientStxAddress,
@@ -218,10 +229,53 @@ program
               payment: {
                 txid,
                 amount: accept.amount + " sats sBTC",
+                status: paymentStatus ?? "confirmed",
               },
             }),
           });
           return;
+        }
+
+        // Handle nonce-specific 409 errors per relay v1.11.1 behavior
+        if (finalRes.status === 409) {
+          const errData =
+            typeof responseData === "object" && responseData !== null
+              ? (responseData as Record<string, unknown>)
+              : {};
+          const code = errData.code as string | undefined;
+          const retryAfter = finalRes.headers.get("Retry-After");
+
+          if (code === "SENDER_NONCE_DUPLICATE") {
+            // Payment already in-flight — treat as pending success, don't retry
+            printJson({
+              success: true,
+              message:
+                "Message payment already in-flight (SENDER_NONCE_DUPLICATE) — delivery pending",
+              note: "Do not retry. Wait for transaction confirmation.",
+            });
+            return;
+          }
+
+          if (code === "NONCE_CONFLICT") {
+            // Sponsor nonce collision — transient, retry after delay
+            throw new Error(
+              `Message delivery failed (NONCE_CONFLICT): retry after ${retryAfter ?? "30"}s. Do not re-sign.`
+            );
+          }
+
+          if (code === "SENDER_NONCE_STALE") {
+            // Nonce already confirmed — need fresh nonce and re-sign
+            throw new Error(
+              `Message delivery failed (SENDER_NONCE_STALE): re-fetch account nonce, re-sign, and retry.`
+            );
+          }
+
+          if (code === "SENDER_NONCE_GAP") {
+            // Nonce skipped ahead — need sequential nonce
+            throw new Error(
+              `Message delivery failed (SENDER_NONCE_GAP): re-fetch account nonce and retry with next sequential nonce.`
+            );
+          }
         }
 
         throw new Error(
