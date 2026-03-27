@@ -272,6 +272,12 @@ program
           );
         }
 
+        // Compute total rune balance across all UTXOs for partial-transfer burn guard
+        const totalRuneAmount = runeUtxos.reduce((sum, u) => {
+          const runeEntry = u.runes.find((r) => r.runeid === opts.runeId);
+          return sum + (runeEntry ? BigInt(runeEntry.amount) : 0n);
+        }, 0n);
+
         // Convert Unisat rune UTXOs to mempool UTXO format for the builder
         const runeUtxosFormatted = runeUtxos.map((u) => ({
           txid: u.txid,
@@ -309,6 +315,7 @@ program
           senderAddress: account.btcAddress,
           senderTaprootAddress: account.taprootAddress,
           network: NETWORK,
+          totalRuneAmount,
         });
 
         const signed = signRuneTransfer(

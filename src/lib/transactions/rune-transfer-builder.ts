@@ -50,6 +50,13 @@ export interface RuneTransferOptions {
   senderTaprootAddress: string;
   /** Network */
   network: Network;
+  /**
+   * Total rune balance held across all runeUtxos (in smallest unit).
+   * When amount < totalRuneAmount, a change output must be viable
+   * (runeChangeSats >= DUST_THRESHOLD) — otherwise the builder throws
+   * rather than silently burning the remaining runes.
+   */
+  totalRuneAmount: bigint;
 }
 
 export interface RuneTransferResult {
@@ -83,6 +90,7 @@ export function buildRuneTransfer(options: RuneTransferOptions): RuneTransferRes
     senderAddress,
     senderTaprootAddress,
     network,
+    totalRuneAmount,
   } = options;
 
   if (runeUtxos.length === 0) {
@@ -185,7 +193,21 @@ export function buildRuneTransfer(options: RuneTransferOptions): RuneTransferRes
 
   // Compute rune change sats BEFORE building Runestone so we know whether to include change pointer
   const runeSats = runeUtxos.reduce((sum, u) => sum + u.value, 0);
-  const runeChangeSats = runeSats - DUST_THRESHOLD; // recipient gets dust from rune sats
+  const runeChangeSats = Math.max(0, runeSats - DUST_THRESHOLD); // recipient gets dust from rune sats
+
+  // Guard against silent rune burn on partial transfers with low-sat UTXOs.
+  // When the change output cannot be included (runeChangeSats < DUST_THRESHOLD)
+  // and this is a partial transfer (amount < totalRuneAmount), the remaining
+  // runes have no destination and will burn per the Ordinals protocol.
+  // Callers should consolidate rune UTXOs so they hold >= 2 * DUST_THRESHOLD sats
+  // before attempting a partial transfer.
+  if (amount < totalRuneAmount && runeChangeSats < DUST_THRESHOLD) {
+    throw new Error(
+      `Partial transfer would burn ${totalRuneAmount - amount} runes: rune UTXOs hold only ${runeSats} sats, ` +
+        `which is insufficient to include a change output (need >= ${2 * DUST_THRESHOLD} sats). ` +
+        `Consolidate rune UTXOs to hold more sats, or transfer the full balance of ${totalRuneAmount}.`
+    );
+  }
 
   // Build Runestone
   const edict: RuneEdict = {
@@ -197,7 +219,7 @@ export function buildRuneTransfer(options: RuneTransferOptions): RuneTransferRes
 
   const runestoneScript = buildRunestoneScript({
     edict,
-    changeOutput: runeChangeSats >= DUST_THRESHOLD ? 2 : undefined, // only set when change output is included
+    changeOutput: runeChangeSats >= DUST_THRESHOLD ? 2 : undefined, // only set when the change output is included in the transaction
   });
 
   // Output 0: OP_RETURN
@@ -210,7 +232,7 @@ export function buildRuneTransfer(options: RuneTransferOptions): RuneTransferRes
   tx.addOutputAddress(recipientAddress, BigInt(DUST_THRESHOLD), btcNetwork);
 
   // Output 2: Rune change back to sender taproot
-  // Carries remaining rune balance (Runestone change pointer = 2, only when included)
+  // Carries remaining rune balance (Runestone change pointer = 2, only when the change output is included in the transaction)
   if (runeChangeSats >= DUST_THRESHOLD) {
     tx.addOutputAddress(senderTaprootAddress, BigInt(runeChangeSats), btcNetwork);
   }
