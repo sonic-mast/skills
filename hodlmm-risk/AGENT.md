@@ -1,96 +1,48 @@
 ---
 name: hodlmm-risk-agent
 skill: hodlmm-risk
-description: "HODLMM volatility risk monitor — regime classification and LP safety signals for Bitflow HODLMM pools. Read-only; no wallet required."
+description: Read-only volatility risk monitor for Bitflow HODLMM pools. Checks pool risk before liquidity operations. No wallet required.
 ---
 
-# Agent Behavior — HODLMM Risk
+# HODLMM Risk Agent
 
-## Decision order
+Monitors Bitflow DLMM pool volatility before liquidity operations. Read-only — no wallet or funds required.
 
-1. Call `assess-pool --pool-id <id>` to get current regime and signals.
-2. If `regime` is `crisis`, do not add liquidity. Surface the risk to the user.
-3. If `regime` is `elevated`, reduce exposure per `maxExposurePct` signal.
-4. If `regime` is `calm`, proceed with normal liquidity operations.
-5. Before holding or withdrawing, call `assess-position` to check drift and concentration.
-6. Follow the `recommendation` field: `hold`, `rebalance`, or `withdraw`.
-7. Use `regime-snapshot` for periodic monitoring and store results externally for trend analysis.
+## Prerequisites
 
-## Guardrails
+- No wallet required
+- Mainnet only (HODLMM pools are mainnet-only)
+- Network access to `bff.bitflowapis.finance`
 
-- This skill is read-only. It never writes to chain or moves funds.
-- Never proceed with liquidity additions when `safeToAddLiquidity` is `false`.
-- Never ignore a `crisis` regime classification.
-- Always surface `driftScore` and `recommendation` to the user before acting on position changes.
-- Default to safe/read-only behavior when intent is ambiguous.
-- Never expose secrets or private keys in args or logs.
+## Decision Logic
 
-## Output contract
+| Goal | Action |
+|------|--------|
+| List available pools | `bun run hodlmm-risk/hodlmm-risk.ts list-pools` |
+| Check pool risk before adding liquidity | `bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id <id>` |
+| Check pool drift / bin health | `bun run hodlmm-risk/hodlmm-risk.ts assess-pool-drift --pool-id <id>` |
+| Scan all pools for crisis conditions | `bun run hodlmm-risk/hodlmm-risk.ts regime-history` |
 
-All commands return structured JSON to stdout.
+## Pre-Liquidity Gate
 
-**assess-pool output:**
-```json
-{
-  "network": "mainnet",
-  "poolId": "string",
-  "activeBinId": "number",
-  "totalBins": "number",
-  "binSpread": "number",
-  "reserveImbalanceRatio": "number",
-  "volatilityScore": "number (0-100)",
-  "regime": "calm | elevated | crisis",
-  "signals": {
-    "safeToAddLiquidity": "boolean",
-    "recommendedBinWidth": "number (3 | 7 | 15)",
-    "maxExposurePct": "number (0.25 | 0.10 | 0.0)"
-  },
-  "timestamp": "ISO 8601"
-}
+Always run `assess-pool` before any liquidity add:
+
+```
+regime: calm     → proceed normally
+regime: elevated → reduce position size to maxExposurePct
+regime: crisis   → STOP — do not add liquidity
 ```
 
-**assess-position output:**
-```json
-{
-  "network": "mainnet",
-  "poolId": "string",
-  "address": "string",
-  "positionBinCount": "number",
-  "activeBinId": "number",
-  "nearestPositionBinOffset": "number",
-  "avgBinOffset": "number",
-  "concentrationRisk": "high | medium | low",
-  "driftScore": "number (0-100)",
-  "impermanentLossEstimatePct": "number",
-  "recommendation": "hold | rebalance | withdraw",
-  "timestamp": "ISO 8601"
-}
-```
+## Safety Checks
 
-**regime-snapshot output:**
-```json
-{
-  "network": "mainnet",
-  "poolId": "string",
-  "volatilityScore": "number (0-100)",
-  "regime": "calm | elevated | crisis",
-  "activeBinId": "number",
-  "binSpread": "number",
-  "reserveImbalanceRatio": "number",
-  "note": "string",
-  "timestamp": "ISO 8601"
-}
-```
+- If API is unreachable, default to `crisis` regime (fail safe — do not add liquidity)
+- If pool ID is not found, exit with error before any liquidity operation
+- Never cache risk scores — always fetch fresh data before each liquidity decision
 
-## On error
+## Error Handling
 
-- Errors are returned as JSON: `{ "error": "descriptive message" }`
-- Do not retry silently — surface the error to the user.
-- Common errors: "No bins returned", "No active liquidity", "Address has no position".
-- Network must be mainnet; testnet calls will fail with a clear error.
-
-## On success
-
-- Report the regime classification and key metrics.
-- If assessing a position, include the recommendation (hold/rebalance/withdraw).
-- Always include timestamp for cache/staleness checks.
+| Error | Action |
+|-------|--------|
+| API unreachable | Return `{ regime: "crisis", reason: "API unreachable — defaulting to safe mode" }` |
+| Pool not found | Return error, abort liquidity operation |
+| Missing bins data | Treat as elevated risk, reduce exposure |

@@ -1,125 +1,144 @@
 ---
 name: hodlmm-risk
-description: "HODLMM volatility risk monitor — reads Bitflow HODLMM pool state, computes current-state volatility proxy from bin distribution, scores regime (calm/elevated/crisis), and emits position-sizing or liquidity-pull signals for LP agents. Read-only; no wallet required."
+description: "Read-only HODLMM volatility risk monitoring for Bitflow DLMM pools. Computes volatility score (0-100), regime classification (calm/elevated/crisis), and position-sizing signals. Agents should call assess-pool before adding liquidity."
 metadata:
-  author: "locallaunchsc-cloud"
-  author-agent: "Risk Sentinel"
+  author: "sonic-mast"
+  author-agent: "Sonic Mast"
   user-invocable: "false"
-  arguments: "assess-pool | assess-position | regime-snapshot"
+  arguments: "list-pools | assess-pool | assess-pool-drift | regime-history"
   entry: "hodlmm-risk/hodlmm-risk.ts"
   requires: ""
-  tags: "l2, defi, read-only, mainnet-only"
+  tags: "l2, read-only"
 ---
 
-# HODLMM Risk Skill
-## What it does
-Monitors HODLMM (DLMM) pool volatility and LP risk on Bitflow. Computes bin spread, reserve imbalance, and concentration metrics to classify market regime and emit position-sizing signals.
-## Why agents need it
-Agents managing HODLMM liquidity need a risk gate before adding, holding, or withdrawing. This skill provides that gate — a numeric volatility score and regime label that downstream agents can use to decide whether to act.
-## Safety notes
-- Read-only — never writes to chain or moves funds.
-- Mainnet only — Bitflow HODLMM APIs are mainnet-only.
-- No wallet or funds required.
-- Pools with all-zero reserves return an error rather than misleading metrics.
-## Commands
+# HODLMM Risk — Volatility Monitor for Bitflow DLMM Pools
+
+Read-only risk intelligence for Bitflow HODLMM (Dynamic Liquidity Market Maker) pools on Stacks mainnet. No wallet or funds required.
+
+## Usage
+
+```bash
+bun run hodlmm-risk/hodlmm-risk.ts <subcommand> [options]
+```
+
+---
+
+## Subcommands
+
+### list-pools
+
+List all active HODLMM pools with basic info.
+
+```bash
+bun run hodlmm-risk/hodlmm-risk.ts list-pools
+```
+
+Output includes pool ID, token pair, active bin, and pool status.
+
+---
+
 ### assess-pool
-Assess volatility and risk metrics for a HODLMM pool.
-```
-bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id <pool_id>
-```
-Options:
-- `--pool-id` (required) — HODLMM pool identifier (e.g. `dlmm_3`)
 
-Output:
+Compute the volatility risk score for a pool. Use this before adding liquidity.
+
+```bash
+bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id dlmm_2
+```
+
+**Options:**
+- `--pool-id <id>` (required) — Pool ID (e.g. `dlmm_2`, `dlmm_6`)
+
+**Risk metrics computed:**
+- **Bin spread** — How many bins have non-zero liquidity, normalized to pool size. Wide spread = more stable. Narrow spread = concentrated, higher drift risk.
+- **Reserve imbalance** — Ratio of X to Y token reserves (by USD value). Near 1.0 = balanced. Far from 1.0 = pool is skewed, active bin may be near edge.
+- **Active bin concentration** — Fraction of total liquidity in the active bin. High concentration = IL risk if price moves.
+- **Composite volatility score** — Weighted combination of the above (0-100, higher = riskier).
+
+**Regime classification:**
+- `calm` — Score 0-33. Safe to add liquidity. Normal IL risk.
+- `elevated` — Score 34-66. Proceed with caution. Reduce exposure per `signals.maxExposurePct`.
+- `crisis` — Score 67-100. Do not add liquidity. High drift/IL risk.
+
+**Example output:**
 ```json
 {
-  "network": "mainnet",
-  "poolId": "dlmm_3",
-  "activeBinId": 447,
-  "totalBins": 69,
-  "binSpread": 0.021,
-  "reserveImbalanceRatio": 0.45,
-  "volatilityScore": 24,
-  "regime": "calm",
-  "signals": {
-    "safeToAddLiquidity": true,
-    "recommendedBinWidth": 3,
-    "maxExposurePct": 0.25
+  "poolId": "dlmm_2",
+  "pair": "sBTC/USDCx",
+  "activeBin": 603,
+  "volatilityScore": 42,
+  "regime": "elevated",
+  "metrics": {
+    "binSpread": 0.12,
+    "reserveImbalance": 1.34,
+    "activeBinConcentration": 0.08
   },
-  "timestamp": "2026-03-24T20:00:00.000Z"
+  "signals": {
+    "recommendation": "caution",
+    "maxExposurePct": 50,
+    "reason": "Reserve imbalance suggests active bin approaching edge"
+  }
 }
 ```
-### assess-position
-Assess risk for a specific wallet's HODLMM position in a pool.
-```
-bun run hodlmm-risk/hodlmm-risk.ts assess-position --pool-id <pool_id> --address <stx_address>
-```
-Options:
-- `--pool-id` (required) — HODLMM pool identifier
-- `--address` (required) — Stacks address to check
 
-Output:
-```json
-{
-  "network": "mainnet",
-  "poolId": "dlmm_3",
-  "address": "SP2...",
-  "positionBinCount": 3,
-  "activeBinId": 447,
-  "nearestPositionBinOffset": 2,
-  "avgBinOffset": 4.33,
-  "concentrationRisk": "medium",
-  "driftScore": 22,
-  "impermanentLossEstimatePct": 1.76,
-  "recommendation": "rebalance",
-  "timestamp": "2026-03-24T20:00:00.000Z"
-}
-```
-### regime-snapshot
-Get a single-point volatility regime snapshot for a pool.
-```
-bun run hodlmm-risk/hodlmm-risk.ts regime-snapshot --pool-id <pool_id>
-```
-Options:
-- `--pool-id` (required) — HODLMM pool identifier
+---
 
-Output:
-```json
-{
-  "network": "mainnet",
-  "poolId": "dlmm_3",
-  "volatilityScore": 24,
-  "regime": "calm",
-  "activeBinId": 447,
-  "binSpread": 0.021,
-  "reserveImbalanceRatio": 0.45,
-  "note": "Single-point snapshot. For trend analysis, store snapshots externally over time.",
-  "timestamp": "2026-03-24T20:00:00.000Z"
-}
+### assess-pool-drift
+
+Evaluate pool-level bin drift and concentration risk. Analyzes how far the active bin has drifted from the center of the pool's liquidity distribution.
+
+> **Note:** Bitflow does not expose a per-address LP position endpoint (all candidate API paths return 404). This command performs pool-level analysis only. The `--address` parameter has been removed from this command.
+
+```bash
+bun run hodlmm-risk/hodlmm-risk.ts assess-pool-drift --pool-id dlmm_2
 ```
-## Output contract
-All outputs are flat JSON to stdout (no wrapper envelope).
 
-On error:
-```json
-{ "error": "descriptive error message" }
+**Options:**
+- `--pool-id <id>` (required) — Pool ID
+
+Evaluates:
+- **Active bin drift** — How far the current active bin has moved from the center of the pool's non-empty bin range
+- **Concentration risk** — Whether the pool spans very few non-empty bins (narrow-range = higher IL sensitivity)
+- **Recommendation** — `hold` / `rebalance` / `withdraw`
+
+---
+
+### regime-history
+
+Return a volatility regime snapshot for all active pools with trend indicator.
+
+```bash
+bun run hodlmm-risk/hodlmm-risk.ts regime-history
 ```
-## Known constraints
-- Mainnet only — Bitflow HODLMM APIs do not exist on testnet.
-- No wallet required — all operations are read-only.
-- Volatility score ranges 0-100: 0-30 = calm, 31-60 = elevated, 61-100 = crisis.
-- Score weights: bin spread (40%), reserve imbalance (30%), liquidity concentration (30%).
-- `driftScore` is derived from `avgBinOffset`: `Math.min(avgOffset * 5, 100)`. Each bin of drift adds +5 score points, capped at 100 (i.e. 20+ bins from active = score 100 = withdraw).
-- `impermanentLossEstimatePct` is a linear approximation: `driftScore * 0.08` (max 8% at driftScore=100). This is a rough monitoring proxy, not a precise price-ratio-based IL calculation.
-- `concentrationRisk` thresholds: 1 bin = "high", 2-3 bins = "medium", 4+ bins = "low".
-- `signals` derivation: calm → `recommendedBinWidth: 3, maxExposurePct: 0.25`; elevated → `recommendedBinWidth: 7, maxExposurePct: 0.10`; crisis → `recommendedBinWidth: 15, maxExposurePct: 0.0`.
-- `regime-snapshot` returns the same volatility computation as `assess-pool` but without signals. Use `assess-pool` for decision-gating before LP actions; use `regime-snapshot` for logging/monitoring pipelines.
-- `regime-snapshot` returns a single point-in-time reading. For trend analysis, store snapshots externally over time.
-- Pools with all-zero reserves will return an error rather than misleading metrics.
-- This skill computes a current-state volatility proxy from bin distribution, not historical realized volatility. No time-series or migration tracking is performed.
 
-## Origin
+Returns all pools with their current regime and score, sorted by risk level (highest first). Useful for scanning which pools are entering crisis before adding liquidity.
 
-Winner of AIBTC x Bitflow Skills Pay the Bills competition Day 2.
-Original author: @locallaunchsc-cloud
-Competition PR: https://github.com/BitflowFinance/bff-skills/pull/23
+---
+
+## Risk Model
+
+The composite volatility score weights three signals:
+
+| Metric | Weight | Description |
+|--------|--------|-------------|
+| Bin spread | 30% | Non-empty bins / total bins. Low spread = high risk. Threshold: ≥20% fill → 0 spread risk. |
+| Reserve imbalance | 40% | \|reserveX_usd - reserveY_usd\| / total. High imbalance = high risk. |
+| Active bin concentration | 30% | Active bin liquidity / total liquidity. High concentration = high risk. |
+
+All metrics are normalized 0-1 before weighting. Final score = weighted sum × 100.
+
+**bin_step scaling:** Wider bin steps amplify per-drift price impact. The score is scaled up by up to +25% for pools with large `bin_step` values (≥201 bps).
+
+---
+
+## When to Use
+
+Call `assess-pool` before any `bitflow add-liquidity-simple` or equivalent operation:
+
+```bash
+# Check risk first
+bun run hodlmm-risk/hodlmm-risk.ts assess-pool --pool-id dlmm_2
+
+# If regime is "calm" — proceed with liquidity add
+# If regime is "elevated" — reduce position size per maxExposurePct
+# If regime is "crisis" — do not add liquidity
+```
