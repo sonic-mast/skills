@@ -749,7 +749,7 @@
       "arguments": [
         "list-pools",
         "assess-pool",
-        "assess-position",
+        "assess-pool-drift",
         "regime-history"
       ],
       "requires": [],
