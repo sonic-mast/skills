@@ -50,6 +50,7 @@ async function signMessage(message: string): Promise<{ signature: string; signer
       cwd: new URL("..", import.meta.url).pathname,
       stdout: "pipe",
       stderr: "pipe",
+      env: { ...process.env },
     }
   );
 
@@ -68,11 +69,13 @@ async function signMessage(message: string): Promise<{ signature: string; signer
     throw new Error(`btc-sign returned invalid JSON: ${stdout}`);
   }
 
-  if (!result.success || !result.signature || !result.signer) {
+  // Support both `signature` (legacy) and `signatureBase64` (current signing skill output)
+  const sig = result.signature ?? (result as Record<string, unknown>).signatureBase64 as string | undefined;
+  if (!result.success || !sig || !result.signer) {
     throw new Error(`btc-sign error: ${result.error || "missing signature or signer in output"}`);
   }
 
-  return { signature: result.signature, signer: result.signer };
+  return { signature: sig, signer: result.signer };
 }
 
 /**
