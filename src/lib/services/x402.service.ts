@@ -20,7 +20,7 @@ import { getWalletManager } from "./wallet-manager.js";
 import { formatStx, formatSbtc } from "../utils/formatting.js";
 import { getSbtcService } from "./sbtc.service.js";
 import { getHiroApi } from "./hiro-api.js";
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 import { InsufficientBalanceError } from "../utils/errors.js";
 import { getContracts, parseContractId } from "../config/contracts.js";
 
@@ -276,18 +276,35 @@ export async function getWalletAddress(): Promise<string> {
 }
 
 /**
- * Get account - checks managed wallet first, then env mnemonic
+ * Get account - checks managed wallet first, then env mnemonic.
+ * If no in-process session exists, attempts to restore a persisted session
+ * from disk (written by a previous `wallet unlock` process) before falling
+ * back to CLIENT_MNEMONIC.
  */
 export async function getAccount(): Promise<Account> {
-  // Check managed wallet session first
   const walletManager = getWalletManager();
-  const sessionAccount = walletManager.getActiveAccount();
 
+  // 1. Check in-process session (fastest path)
+  const sessionAccount = walletManager.getActiveAccount();
   if (sessionAccount) {
     return sessionAccount;
   }
 
-  // Fall back to environment mnemonic
+  // 2. Attempt to restore session from disk (cross-process persistence)
+  try {
+    const { readAppConfig } = await import("../utils/storage.js");
+    const config = await readAppConfig();
+    if (config.activeWalletId) {
+      const restored = await walletManager.restoreSessionFromDisk(config.activeWalletId);
+      if (restored) {
+        return restored;
+      }
+    }
+  } catch {
+    // Non-fatal — fall through to CLIENT_MNEMONIC
+  }
+
+  // 3. Fall back to environment mnemonic
   const mnemonic = process.env.CLIENT_MNEMONIC || "";
   if (!mnemonic) {
     throw new Error(
@@ -331,9 +348,11 @@ export type ProbeResult = ProbeResultFree | ProbeResultPaymentRequired;
  */
 export function detectTokenType(asset: string): 'STX' | 'sBTC' {
   const assetLower = asset.trim().toLowerCase();
-  // Treat as sBTC only if the asset is exactly "sbtc" (token name)
-  // or a full contract identifier ending with "::token-sbtc"
-  if (assetLower === 'sbtc' || assetLower.endsWith('::token-sbtc')) {
+  // Treat as sBTC if:
+  // - exactly "sbtc" (token name only)
+  // - contract identifier contains "sbtc-token" (e.g. "SM3....sbtc-token" or "SM3....sbtc-token::sbtc-token")
+  // - full qualifier ending with "::token-sbtc" (legacy format)
+  if (assetLower === 'sbtc' || assetLower.includes('sbtc-token') || assetLower.endsWith('::token-sbtc')) {
     return 'sBTC';
   }
   return 'STX';

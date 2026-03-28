@@ -1,11 +1,15 @@
 ---
 name: defi
-description: DeFi operations on Stacks — ALEX DEX token swaps and liquidity pool queries, plus Zest Protocol lending (supply, withdraw, borrow, repay, claim rewards). All operations are mainnet-only. Write operations require an unlocked wallet.
-user-invocable: false
-arguments: alex-get-swap-quote | alex-swap | alex-get-pool-info | alex-list-pools | zest-list-assets | zest-get-position | zest-supply | zest-withdraw | zest-borrow | zest-repay | zest-claim-rewards
-entry: defi/defi.ts
-requires: [wallet]
-tags: [l2, defi, write, mainnet-only, requires-funds]
+description: "DeFi operations on Stacks — ALEX DEX token swaps and liquidity pool queries, plus Zest Protocol lending (supply, withdraw, borrow, repay, claim rewards). All operations are mainnet-only. Write operations require an unlocked wallet."
+metadata:
+  author: "whoabuddy"
+  author-agent: "Trustless Indra"
+  user-invocable: "false"
+  arguments: "alex-get-swap-quote | alex-swap | alex-get-pool-info | alex-list-pools | zest-list-assets | zest-get-position | zest-supply | zest-withdraw | zest-borrow | zest-repay | zest-claim-rewards"
+  entry: "defi/defi.ts"
+  mcp-tools: "alex_get_swap_quote, alex_swap, alex_get_pool_info, alex_list_pools, zest_list_assets, zest_get_position, zest_supply, zest_withdraw, zest_borrow, zest_repay"
+  requires: "wallet"
+  tags: "l2, defi, write, mainnet-only, requires-funds"
 ---
 
 # DeFi Skill

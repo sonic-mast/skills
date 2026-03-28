@@ -102,10 +102,11 @@ program
       "Use execute-endpoint or probe-endpoint to interact with specific endpoints."
   )
   .action(() => {
-    printJson({
-      network: NETWORK,
-      defaultApiUrl: API_URL,
-      sources: [
+    try {
+      printJson({
+        network: NETWORK,
+        defaultApiUrl: API_URL,
+        sources: [
         {
           name: "x402.biwas.xyz",
           url: "https://x402.biwas.xyz",
@@ -142,7 +143,10 @@ program
         customSource: "bun run x402/x402.ts execute-endpoint --method GET --url https://stx402.com/ai/dad-joke --auto-approve",
       },
       tip: "Use probe-endpoint to check cost before paying. Use execute-endpoint with --auto-approve to pay and execute.",
-    });
+      });
+    } catch (error) {
+      handleError(error);
+    }
   });
 
 // ---------------------------------------------------------------------------
@@ -165,6 +169,7 @@ program
   .option("--api-url <url>", `API base URL (default: ${API_URL})`)
   .option("--params <json>", "Query parameters as JSON object (e.g., '{\"limit\":\"10\"}')", "{}")
   .option("--data <json>", "Request body for POST/PUT as JSON object", "{}")
+  .option("--headers <json>", "Additional request headers as JSON object", "{}")
   .option(
     "--auto-approve",
     "Skip cost probe and execute immediately, paying if required",
@@ -178,6 +183,7 @@ program
       apiUrl?: string;
       params: string;
       data: string;
+      headers: string;
       autoApprove: boolean;
     }) => {
       let fullUrl = "";
@@ -199,6 +205,21 @@ program
           if (Object.keys(parsedData).length > 0) data = parsedData;
         } catch {
           throw new Error("--data must be valid JSON");
+        }
+
+        let customHeaders: Record<string, string> | undefined;
+        try {
+          const parsedHeaders: unknown = JSON.parse(opts.headers);
+          if (
+            typeof parsedHeaders === "object" &&
+            parsedHeaders !== null &&
+            !Array.isArray(parsedHeaders) &&
+            Object.keys(parsedHeaders).length > 0
+          ) {
+            customHeaders = parsedHeaders as Record<string, string>;
+          }
+        } catch {
+          throw new Error("--headers must be valid JSON object");
         }
 
         const parsed = parseEndpointUrl({
@@ -235,7 +256,7 @@ program
               recipient: probeResult.recipient,
               network: probeResult.network,
             },
-            retryWith: `--auto-approve ${opts.url ? `--url ${opts.url}` : `--path ${opts.path}`}${opts.apiUrl ? ` --api-url ${opts.apiUrl}` : ""}${params ? ` --params '${JSON.stringify(params)}'` : ""}${data ? ` --data '${JSON.stringify(data)}'` : ""}`,
+            retryWith: `--auto-approve ${opts.url ? `--url ${opts.url}` : `--path ${opts.path}`}${opts.apiUrl ? ` --api-url ${opts.apiUrl}` : ""}${params ? ` --params '${JSON.stringify(params)}'` : ""}${data ? ` --data '${JSON.stringify(data)}'` : ""}${customHeaders ? ` --headers '${JSON.stringify(customHeaders)}'` : ""}`,
           });
           return;
         }
@@ -245,7 +266,7 @@ program
 
         if (probeResult.type === "payment_required") {
           const api = await createApiClient(parsed.baseUrl);
-          const response = await api.request({ method, url: parsed.requestPath, params, data });
+          const response = await api.request({ method, url: parsed.requestPath, params, data, headers: customHeaders });
 
           printJson({
             endpoint: `${method} ${fullUrl}`,
@@ -256,7 +277,7 @@ program
 
         // Free endpoint - execute without payment client
         const api = createPlainClient(parsed.baseUrl);
-        const response = await api.request({ method, url: parsed.requestPath, params, data });
+        const response = await api.request({ method, url: parsed.requestPath, params, data, headers: customHeaders });
 
         printJson({
           endpoint: `${method} ${fullUrl}`,
@@ -557,7 +578,7 @@ program
   .command("scaffold-endpoint")
   .description(
     "Create a complete x402 paid API project as a Cloudflare Worker. " +
-      "Generates a new project folder with Hono.js app, x402 payment middleware, wrangler config, and README."
+      "Generates a new project folder with Hono.js app, x402 payment middleware, wrangler.jsonc config, and README."
   )
   .requiredOption("--output-dir <dir>", "Directory where the project folder will be created")
   .requiredOption(
@@ -662,7 +683,7 @@ program
   .command("scaffold-ai-endpoint")
   .description(
     "Create a complete x402 paid AI API project with OpenRouter integration as a Cloudflare Worker. " +
-      "Generates a new project folder with Hono.js app, x402 middleware, OpenRouter client, and wrangler config."
+      "Generates a new project folder with Hono.js app, x402 middleware, OpenRouter client, and wrangler.jsonc config."
   )
   .requiredOption("--output-dir <dir>", "Directory where the project folder will be created")
   .requiredOption(
@@ -788,6 +809,7 @@ program
     "all"
   )
   .action(async (opts: { environment: string; feature: string }) => {
+    try {
     const guides: Record<string, string> = {};
 
     guides.apiOverview = `
@@ -905,6 +927,9 @@ Best Practices:
       guides,
       tip: "Use these code examples as templates. Replace placeholders with your actual values.",
     });
+    } catch (error) {
+      handleError(error);
+    }
   });
 
 // ---------------------------------------------------------------------------
@@ -923,6 +948,7 @@ program
     "all"
   )
   .action((opts: { category: string }) => {
+    try {
     const allModels = [
       { id: "anthropic/claude-3.5-haiku", name: "Claude 3.5 Haiku", category: ["fast", "cheap"], contextLength: 200000, bestFor: "Fast responses, simple tasks, cost-effective" },
       { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", category: ["quality", "long-context"], contextLength: 1000000, bestFor: "Best overall, complex reasoning, coding" },
@@ -953,6 +979,9 @@ program
           ? "Start with claude-3.5-haiku or gpt-4o-mini for most tasks. Use claude-sonnet-4.5 or deepseek-r1 for complex reasoning."
           : undefined,
     });
+    } catch (error) {
+      handleError(error);
+    }
   });
 
 // ---------------------------------------------------------------------------

@@ -90,7 +90,11 @@ export async function sponsoredContractCall(
     throw new Error(formatRelayError(response));
   }
 
-  return { txid: response.txid!, rawTx: serializedTx };
+  if (!response.txid) {
+    throw new Error("Sponsor relay succeeded but returned no txid");
+  }
+
+  return { txid: response.txid, rawTx: serializedTx };
 }
 
 /**

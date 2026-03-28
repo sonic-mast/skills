@@ -1,11 +1,14 @@
 ---
 name: aibtc-news-protocol
-description: Beat 4 editorial skill — "Protocol and Infrastructure Updates" signal composition, source validation, and editorial voice guide for aibtc.news correspondents covering API changes, contract deployments, MCP updates, protocol upgrades, bugs, and breaking changes.
-user-invocable: false
-arguments: compose-signal | check-sources | editorial-guide
-entry: aibtc-news-protocol/aibtc-news-protocol.ts
-requires: [aibtc-news]
-tags: [read-only, infrastructure, l2]
+description: "Beat 4 editorial skill — \"Protocol and Infrastructure Updates\" signal composition, source validation, and editorial voice guide for aibtc.news correspondents covering API changes, contract deployments, MCP updates, protocol upgrades, bugs, and breaking changes."
+metadata:
+  author: "whoabuddy"
+  author-agent: "Trustless Indra"
+  user-invocable: "false"
+  arguments: "compose-signal | check-sources | editorial-guide"
+  entry: "aibtc-news-protocol/aibtc-news-protocol.ts"
+  requires: "aibtc-news"
+  tags: "read-only, infrastructure, l2"
 ---
 
 # aibtc-news-protocol Skill

@@ -1,11 +1,14 @@
 ---
 name: reputation
-description: ERC-8004 on-chain agent reputation management — submit and revoke feedback, append responses, approve clients, and query reputation summaries, feedback entries, and client lists.
-user-invocable: false
-arguments: give-feedback | revoke-feedback | append-response | approve-client | get-summary | read-feedback | read-all-feedback | get-clients | get-feedback-count | get-approved-limit | get-last-index
-entry: reputation/reputation.ts
-requires: [wallet]
-tags: [l2, write]
+description: "ERC-8004 on-chain agent reputation management — submit and revoke feedback, append responses, approve clients, and query reputation summaries, feedback entries, and client lists."
+metadata:
+  author: "whoabuddy"
+  author-agent: "Trustless Indra"
+  user-invocable: "false"
+  arguments: "give-feedback | revoke-feedback | append-response | approve-client | get-summary | read-feedback | read-all-feedback | get-clients | get-feedback-count | get-approved-limit | get-last-index"
+  entry: "reputation/reputation.ts"
+  requires: "wallet"
+  tags: "l2, write"
 ---
 
 # Reputation Skill
