@@ -102,10 +102,11 @@ program
       "Use execute-endpoint or probe-endpoint to interact with specific endpoints."
   )
   .action(() => {
-    printJson({
-      network: NETWORK,
-      defaultApiUrl: API_URL,
-      sources: [
+    try {
+      printJson({
+        network: NETWORK,
+        defaultApiUrl: API_URL,
+        sources: [
         {
           name: "x402.biwas.xyz",
           url: "https://x402.biwas.xyz",
@@ -142,7 +143,10 @@ program
         customSource: "bun run x402/x402.ts execute-endpoint --method GET --url https://stx402.com/ai/dad-joke --auto-approve",
       },
       tip: "Use probe-endpoint to check cost before paying. Use execute-endpoint with --auto-approve to pay and execute.",
-    });
+      });
+    } catch (error) {
+      handleError(error);
+    }
   });
 
 // ---------------------------------------------------------------------------
@@ -165,6 +169,7 @@ program
   .option("--api-url <url>", `API base URL (default: ${API_URL})`)
   .option("--params <json>", "Query parameters as JSON object (e.g., '{\"limit\":\"10\"}')", "{}")
   .option("--data <json>", "Request body for POST/PUT as JSON object", "{}")
+  .option("--headers <json>", "Additional request headers as JSON object", "{}")
   .option(
     "--auto-approve",
     "Skip cost probe and execute immediately, paying if required",
@@ -178,6 +183,7 @@ program
       apiUrl?: string;
       params: string;
       data: string;
+      headers: string;
       autoApprove: boolean;
     }) => {
       let fullUrl = "";
@@ -199,6 +205,21 @@ program
           if (Object.keys(parsedData).length > 0) data = parsedData;
         } catch {
           throw new Error("--data must be valid JSON");
+        }
+
+        let customHeaders: Record<string, string> | undefined;
+        try {
+          const parsedHeaders: unknown = JSON.parse(opts.headers);
+          if (
+            typeof parsedHeaders === "object" &&
+            parsedHeaders !== null &&
+            !Array.isArray(parsedHeaders) &&
+            Object.keys(parsedHeaders).length > 0
+          ) {
+            customHeaders = parsedHeaders as Record<string, string>;
+          }
+        } catch {
+          throw new Error("--headers must be valid JSON object");
         }
 
         const parsed = parseEndpointUrl({
@@ -235,7 +256,7 @@ program
               recipient: probeResult.recipient,
               network: probeResult.network,
             },
-            retryWith: `--auto-approve ${opts.url ? `--url ${opts.url}` : `--path ${opts.path}`}${opts.apiUrl ? ` --api-url ${opts.apiUrl}` : ""}${params ? ` --params '${JSON.stringify(params)}'` : ""}${data ? ` --data '${JSON.stringify(data)}'` : ""}`,
+            retryWith: `--auto-approve ${opts.url ? `--url ${opts.url}` : `--path ${opts.path}`}${opts.apiUrl ? ` --api-url ${opts.apiUrl}` : ""}${params ? ` --params '${JSON.stringify(params)}'` : ""}${data ? ` --data '${JSON.stringify(data)}'` : ""}${customHeaders ? ` --headers '${JSON.stringify(customHeaders)}'` : ""}`,
           });
           return;
         }
@@ -245,7 +266,7 @@ program
 
         if (probeResult.type === "payment_required") {
           const api = await createApiClient(parsed.baseUrl);
-          const response = await api.request({ method, url: parsed.requestPath, params, data });
+          const response = await api.request({ method, url: parsed.requestPath, params, data, headers: customHeaders });
 
           printJson({
             endpoint: `${method} ${fullUrl}`,
@@ -256,7 +277,7 @@ program
 
         // Free endpoint - execute without payment client
         const api = createPlainClient(parsed.baseUrl);
-        const response = await api.request({ method, url: parsed.requestPath, params, data });
+        const response = await api.request({ method, url: parsed.requestPath, params, data, headers: customHeaders });
 
         printJson({
           endpoint: `${method} ${fullUrl}`,
@@ -413,33 +434,18 @@ program
           );
         }
 
-        // Parse payment requirements from 402 response
+        // Step 2: Parse payment requirements from 402 response
         const paymentHeader = initialRes.headers.get("payment-required");
         if (!paymentHeader) {
           throw new Error("402 response missing payment-required header");
         }
 
-        // Import x402 protocol utilities
-        const {
-          decodePaymentRequired,
-          encodePaymentPayload,
-          X402_HEADERS,
-        } = await import("../src/lib/utils/x402-protocol.js");
-        const {
-          makeContractCall,
-          uintCV,
-          principalCV,
-          noneCV,
-        } = await import("@stacks/transactions");
-        const {
-          getContracts,
-          parseContractId,
-        } = await import("../src/lib/config/contracts.js");
-        const { getStacksNetwork } = await import("../src/lib/config/networks.js");
-        const { createFungiblePostCondition } = await import(
-          "../src/lib/transactions/post-conditions.js"
+        const { decodePaymentRequired } = await import(
+          "../src/lib/utils/x402-protocol.js"
         );
-        const { getHiroApi } = await import("../src/lib/services/hiro-api.js");
+        const { getExplorerTxUrl } = await import(
+          "../src/lib/config/networks.js"
+        );
 
         const paymentRequired = decodePaymentRequired(paymentHeader);
         if (
@@ -450,99 +456,51 @@ program
           throw new Error("No accepted payment methods in 402 response");
         }
         const accept = paymentRequired.accepts[0];
-        const amount = BigInt(accept.amount);
 
-        // Build sponsored sBTC transfer
-        const contracts = getContracts(NETWORK);
-        const { address: contractAddress, name: contractName } =
-          parseContractId(contracts.SBTC_TOKEN);
-        const networkName = getStacksNetwork(NETWORK);
+        // Step 3: Compute SHA-256 content hash for on-chain delivery receipt
+        const contentBytes = new TextEncoder().encode(opts.content);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", contentBytes);
+        const contentHash = Buffer.from(new Uint8Array(hashBuffer)).toString("hex");
 
-        const postCondition = createFungiblePostCondition(
-          account.address,
-          contracts.SBTC_TOKEN,
-          "sbtc-token",
-          "eq",
-          amount
+        // Step 4: Execute with retry logic (handles nonce conflicts, 409s, 502/503)
+        const { executeInboxWithRetry } = await import(
+          "../src/lib/utils/x402-retry.js"
         );
 
-        // Get current nonce
-        const hiro = getHiroApi(NETWORK);
-        const accountInfo = await hiro.getAccountInfo(account.address);
-        const nonce = BigInt(accountInfo.nonce);
-
-        const transaction = await makeContractCall({
-          contractAddress,
-          contractName,
-          functionName: "transfer",
-          functionArgs: [
-            uintCV(amount),
-            principalCV(account.address),
-            principalCV(accept.payTo),
-            noneCV(),
-          ],
-          senderKey: account.privateKey,
-          network: networkName,
-          postConditions: [postCondition],
-          sponsored: true,
-          fee: 0n,
-          nonce,
-        });
-
-        const txHex = "0x" + transaction.serialize();
-
-        // Encode payment payload
-        const paymentSignature = encodePaymentPayload({
-          x402Version: 2,
-          resource: paymentRequired.resource,
-          accepted: accept,
-          payload: { transaction: txHex },
-        });
-
-        // Send with payment header
-        const finalRes = await fetch(inboxUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            [X402_HEADERS.PAYMENT_SIGNATURE]: paymentSignature,
+        const result = await executeInboxWithRetry({
+          inboxUrl,
+          body,
+          paymentRequired,
+          accept,
+          account: {
+            address: account.address,
+            privateKey: account.privateKey,
           },
-          body: JSON.stringify(body),
+          network: NETWORK,
+          contentHash,
         });
 
-        const responseText = await finalRes.text();
-        let responseData: unknown;
-        try {
-          responseData = JSON.parse(responseText);
-        } catch {
-          responseData = { raw: responseText };
-        }
-
-        if (finalRes.status === 201 || finalRes.status === 200) {
-          const settlementHeader = finalRes.headers.get(X402_HEADERS.PAYMENT_RESPONSE);
-          const { decodePaymentResponse } = await import("../src/lib/utils/x402-protocol.js");
-          const settlement = decodePaymentResponse(settlementHeader);
-          const txid = settlement?.transaction;
-
-          printJson({
-            success: true,
-            message: "Message delivered",
-            recipient: {
-              btcAddress: opts.recipientBtcAddress,
-              stxAddress: opts.recipientStxAddress,
+        // Step 5: Format and print result
+        printJson({
+          success: true,
+          message: result.recovered
+            ? "Message delivered (auto-recovered)"
+            : "Message delivered",
+          recipient: {
+            btcAddress: opts.recipientBtcAddress,
+            stxAddress: opts.recipientStxAddress,
+          },
+          contentLength: opts.content.length,
+          contentHash,
+          inbox: result.responseData,
+          ...(result.settlementTxid && {
+            payment: {
+              txid: result.settlementTxid,
+              amount: accept.amount + " sats sBTC",
+              explorer: getExplorerTxUrl(result.settlementTxid, NETWORK),
             },
-            contentLength: opts.content.length,
-            inbox: responseData,
-            ...(txid && {
-              payment: {
-                txid,
-                amount: accept.amount + " sats sBTC",
-              },
-            }),
-          });
-          return;
-        }
-
-        throw new Error(`Message delivery failed (${finalRes.status}): ${responseText}`);
+          }),
+        });
       } catch (error) {
         handleError(error);
       }
@@ -557,7 +515,7 @@ program
   .command("scaffold-endpoint")
   .description(
     "Create a complete x402 paid API project as a Cloudflare Worker. " +
-      "Generates a new project folder with Hono.js app, x402 payment middleware, wrangler config, and README."
+      "Generates a new project folder with Hono.js app, x402 payment middleware, wrangler.jsonc config, and README."
   )
   .requiredOption("--output-dir <dir>", "Directory where the project folder will be created")
   .requiredOption(
@@ -662,7 +620,7 @@ program
   .command("scaffold-ai-endpoint")
   .description(
     "Create a complete x402 paid AI API project with OpenRouter integration as a Cloudflare Worker. " +
-      "Generates a new project folder with Hono.js app, x402 middleware, OpenRouter client, and wrangler config."
+      "Generates a new project folder with Hono.js app, x402 middleware, OpenRouter client, and wrangler.jsonc config."
   )
   .requiredOption("--output-dir <dir>", "Directory where the project folder will be created")
   .requiredOption(
@@ -788,6 +746,7 @@ program
     "all"
   )
   .action(async (opts: { environment: string; feature: string }) => {
+    try {
     const guides: Record<string, string> = {};
 
     guides.apiOverview = `
@@ -905,6 +864,9 @@ Best Practices:
       guides,
       tip: "Use these code examples as templates. Replace placeholders with your actual values.",
     });
+    } catch (error) {
+      handleError(error);
+    }
   });
 
 // ---------------------------------------------------------------------------
@@ -923,6 +885,7 @@ program
     "all"
   )
   .action((opts: { category: string }) => {
+    try {
     const allModels = [
       { id: "anthropic/claude-3.5-haiku", name: "Claude 3.5 Haiku", category: ["fast", "cheap"], contextLength: 200000, bestFor: "Fast responses, simple tasks, cost-effective" },
       { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", category: ["quality", "long-context"], contextLength: 1000000, bestFor: "Best overall, complex reasoning, coding" },
@@ -953,6 +916,9 @@ program
           ? "Start with claude-3.5-haiku or gpt-4o-mini for most tasks. Use claude-sonnet-4.5 or deepseek-r1 for complex reasoning."
           : undefined,
     });
+    } catch (error) {
+      handleError(error);
+    }
   });
 
 // ---------------------------------------------------------------------------

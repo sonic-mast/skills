@@ -5,7 +5,8 @@
     "": {
       "name": "@aibtc/skills",
       "dependencies": {
-        "@bitflowlabs/core-sdk": "^2.4.0",
+        "@bitflowlabs/core-sdk": "^3.0.0",
+        "@faktoryfun/styx-sdk": "^1.3.5",
         "@noble/curves": "^2.0.1",
         "@scure/base": "^2.0.0",
         "@scure/bip32": "^1.6.2",
@@ -23,6 +24,7 @@
         "micro-ordinals": "^0.3.0",
         "sbtc": "^0.3.2",
         "tslib": "^2.8.1",
+        "yaml": "^2.8.2",
         "zod": "^4.3.5",
       },
       "devDependencies": {
@@ -33,9 +35,11 @@
     },
   },
   "packages": {
-    "@bitflowlabs/core-sdk": ["@bitflowlabs/core-sdk@2.4.2", "", { "dependencies": { "@stacks/connect": "^7.10.2", "@stacks/network": "^7.0.2", "@stacks/transactions": "^7.0.5", "dotenv": "^16.4.7" } }, "sha512-6csq/8wqnNpcO/CDMtWgN2AFegHatUZM3JnF9zWNwiRlxnm2Va68ku/zPbeurrbQgbqwB/1kmZLSOJkPzjacfA=="],
+    "@bitflowlabs/core-sdk": ["@bitflowlabs/core-sdk@3.0.0", "", { "dependencies": { "@stacks/connect": "^7.10.2", "@stacks/network": "^7.0.2", "@stacks/transactions": "^7.0.5", "dotenv": "^16.4.7" } }, "sha512-5+STFKWtJzIx7G3MuZLPkB1T1r8HZEQ04Qe9anPhD8WwqRymzA8Km7J6AVGtrXuuE6svgqL0ezUwZUgOcUK0QA=="],
 
     "@btc-helpers/rpc": ["@btc-helpers/rpc@2.0.0", "", { "dependencies": { "@scure/base": "^1.1.1", "cross-fetch": "^3.1.5" } }, "sha512-Y5T3MUCW3lMENJiOJEk4DOwTW6GY/b/xmcf+kxoPZZw2uCyY+m3a9wV9wrJdIceqv3ET2iLFbGHjLwl25UYwGA=="],
+
+    "@faktoryfun/styx-sdk": ["@faktoryfun/styx-sdk@1.3.5", "", {}, "sha512-9k2oGmOGkd8bzh0IObO1AP7CXNInL3HAb8Y2CtajHydzumDScgkowIVqfhdj086WTSdoPiffTZAMFnH9xHkKxw=="],
 
     "@noble/curves": ["@noble/curves@2.0.1", "", { "dependencies": { "@noble/hashes": "2.0.1" } }, "sha512-vs1Az2OOTBiP4q0pwjW5aF0xp9n4MxVrmkFBxc6EKZc6ddYx5gaZiAsZoq0uRRXWbi3AT/sBqn05eRPtn1JCPw=="],
 
@@ -218,6 +222,8 @@
     "wrap-ansi": ["wrap-ansi@7.0.0", "", { "dependencies": { "ansi-styles": "^4.0.0", "string-width": "^4.1.0", "strip-ansi": "^6.0.0" } }, "sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q=="],
 
     "y18n": ["y18n@5.0.8", "", {}, "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA=="],
+
+    "yaml": ["yaml@2.8.2", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A=="],
 
     "yargs": ["yargs@17.7.2", "", { "dependencies": { "cliui": "^8.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "require-directory": "^2.1.1", "string-width": "^4.2.3", "y18n": "^5.0.5", "yargs-parser": "^21.1.1" } }, "sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w=="],
 

@@ -1,11 +1,15 @@
 ---
 name: x402
-description: x402 paid API endpoints, inbox messaging, project scaffolding, and OpenRouter AI integration. Execute and probe x402-enabled endpoints from multiple sources, send inbox messages with sponsored sBTC transactions, scaffold new x402 Cloudflare Worker projects, and explore OpenRouter model options.
-user-invocable: false
-arguments: list-endpoints | execute-endpoint | probe-endpoint | send-inbox-message | scaffold-endpoint | scaffold-ai-endpoint | openrouter-guide | openrouter-models
-entry: x402/x402.ts
-requires: [wallet]
-tags: [l2, write]
+description: "x402 paid API endpoints, inbox messaging, project scaffolding, and OpenRouter AI integration. Execute and probe x402-enabled endpoints from multiple sources, send inbox messages with sponsored sBTC transactions, scaffold new x402 Cloudflare Worker projects, and explore OpenRouter model options."
+metadata:
+  author: "whoabuddy"
+  author-agent: "Trustless Indra"
+  user-invocable: "false"
+  arguments: "list-endpoints | execute-endpoint | probe-endpoint | send-inbox-message | scaffold-endpoint | scaffold-ai-endpoint | openrouter-guide | openrouter-models"
+  entry: "x402/x402.ts"
+  mcp-tools: "list_x402_endpoints, execute_x402_endpoint, probe_x402_endpoint, scaffold_x402_endpoint, scaffold_x402_ai_endpoint, openrouter_integration_guide, openrouter_models"
+  requires: "wallet"
+  tags: "l2, write"
 ---
 
 # x402 Skill
@@ -146,7 +150,7 @@ Output:
 
 ### scaffold-endpoint
 
-Create a complete x402 paid API project as a Cloudflare Worker. Generates a new project folder with Hono.js app, x402 payment middleware, wrangler config, and README.
+Create a complete x402 paid API project as a Cloudflare Worker. Generates a new project folder with Hono.js app, x402 payment middleware, wrangler.jsonc config, and README.
 
 ```
 bun run x402/x402.ts scaffold-endpoint \

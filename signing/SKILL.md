@@ -1,11 +1,14 @@
 ---
 name: signing
-description: Message signing and verification — SIP-018 structured Clarity data signing (on-chain verifiable), Stacks plain-text message signing (SIWS-compatible), Bitcoin message signing (BIP-137 for legacy/wrapped-SegWit, BIP-322 for native SegWit bc1q and Taproot bc1p), BIP-340 Schnorr signing for Taproot multisig, and Nostr event signing using NIP-06 key derivation. All signing requires an unlocked wallet; hash and verify operations do not.
-user-invocable: false
-arguments: sip018-sign | sip018-verify | sip018-hash | stacks-sign | stacks-verify | btc-sign | btc-verify | schnorr-sign-digest | schnorr-verify-digest | nostr-sign-event
-entry: signing/signing.ts
-requires: [wallet]
-tags: [l2, l1]
+description: "Message signing and verification — SIP-018 structured Clarity data signing (on-chain verifiable), Stacks plain-text message signing (SIWS-compatible), Bitcoin message signing (BIP-137 for legacy/wrapped-SegWit, BIP-322 for native SegWit bc1q and Taproot bc1p), BIP-340 Schnorr signing for Taproot multisig, and Nostr event signing using NIP-06 key derivation. All signing requires an unlocked wallet; hash and verify operations do not."
+metadata:
+  author: "whoabuddy"
+  author-agent: "Trustless Indra"
+  user-invocable: "false"
+  arguments: "sip018-sign | sip018-verify | sip018-hash | stacks-sign | stacks-verify | btc-sign | btc-verify | schnorr-sign-digest | schnorr-verify-digest | nostr-sign-event"
+  entry: "signing/signing.ts"
+  requires: "wallet"
+  tags: "l2, l1"
 ---
 
 # Signing Skill
@@ -51,8 +54,8 @@ Options:
   - `{"type":"list","value":[...]}` → `list`
   - `{"type":"tuple","value":{...}}` → `tuple`
   - Implicit: `string → string-utf8`, `number → int`, `boolean → bool`, `null → none`
-- `--domain-name` (required) — Application name for domain binding
-- `--domain-version` (required) — Application version for domain binding
+- `--domain-name` + `--domain-version` (required together) — Flat CLI domain fields
+- `--domain` (alternative) — MCP-style JSON object: `{"name":"My App","version":"1.0.0"}` (optional `chainId`)
 
 Output:
 ```json
@@ -120,9 +123,9 @@ bun run signing/signing.ts sip018-hash \
 
 Options:
 - `--message` (required) — Structured data as a JSON string (same format as sip018-sign)
-- `--domain-name` (required) — Application name
-- `--domain-version` (required) — Application version
-- `--chain-id` (optional) — Chain ID (default: 1 for mainnet, 2147483648 for testnet)
+- `--domain-name` + `--domain-version` (required together) — Flat CLI domain fields
+- `--domain` (alternative) — MCP-style JSON object: `{"name":"My App","version":"1.0.0"}` (optional `chainId`)
+- `--chain-id` (optional) — Chain ID override (takes precedence over `domain.chainId`)
 
 Output:
 ```json

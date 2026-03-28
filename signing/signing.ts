@@ -786,6 +786,32 @@ function requireUnlockedWallet() {
   return account;
 }
 
+async function unlockWalletFromOptions(opts: {
+  walletPassword?: string;
+  walletPasswordEnv?: string;
+}): Promise<void> {
+  const walletManager = getWalletManager();
+
+  if (walletManager.getActiveAccount()) {
+    return;
+  }
+
+  const envVarName = opts.walletPasswordEnv || "AIBTC_WALLET_PASSWORD";
+  const passwordFromEnv = process.env[envVarName];
+  const password = passwordFromEnv || opts.walletPassword;
+
+  if (!password) {
+    return;
+  }
+
+  const walletId = await walletManager.getActiveWalletId();
+  if (!walletId) {
+    throw new Error("No active wallet found. Create or import a wallet first.");
+  }
+
+  await walletManager.unlock(walletId, password);
+}
+
 // ---------------------------------------------------------------------------
 // Program
 // ---------------------------------------------------------------------------
@@ -813,7 +839,7 @@ function resolveDomainParams(opts: {
   domain?: string;
   domainName?: string;
   domainVersion?: string;
-}): { name: string; version: string } {
+}): { name: string; version: string; chainId?: number } {
   if (opts.domain) {
     const parsed = parseJsonObject(opts.domain, "--domain");
     if (typeof parsed.name !== "string" || typeof parsed.version !== "string") {
@@ -821,7 +847,20 @@ function resolveDomainParams(opts: {
         '--domain must be a JSON object with "name" and "version" string fields'
       );
     }
-    return { name: parsed.name, version: parsed.version };
+
+    let chainId: number | undefined;
+    if (parsed.chainId !== undefined) {
+      const parsedChainId =
+        typeof parsed.chainId === "string"
+          ? parseInt(parsed.chainId, 10)
+          : parsed.chainId;
+      if (!Number.isInteger(parsedChainId)) {
+        throw new Error('--domain.chainId must be an integer when provided');
+      }
+      chainId = parsedChainId;
+    }
+
+    return { name: parsed.name, version: parsed.version, chainId };
   }
   if (opts.domainName && opts.domainVersion) {
     return { name: opts.domainName, version: opts.domainVersion };
@@ -838,7 +877,7 @@ function addDomainOptions(cmd: Command): Command {
   return cmd
     .option(
       "--domain <json>",
-      "Domain as JSON object matching MCP format (e.g., '{\"name\":\"My App\",\"version\":\"1.0.0\"}')"
+      "Domain as JSON object matching MCP format (e.g., '{\"name\":\"My App\",\"version\":\"1.0.0\",\"chainId\":2147483648}')"
     )
     .option(
       "--domain-name <name>",
@@ -898,9 +937,13 @@ addDomainOptions(sip018SignCmd)
       try {
         const account = requireUnlockedWallet();
         const messageJson = parseJsonObject(opts.message, "--message");
-        const { name: domainName, version: domainVersion } = resolveDomainParams(opts);
+        const {
+          name: domainName,
+          version: domainVersion,
+          chainId: domainChainId,
+        } = resolveDomainParams(opts);
 
-        const chainId = CHAIN_IDS[NETWORK];
+        const chainId = domainChainId ?? CHAIN_IDS[NETWORK];
         const domainCV = buildDomainCV(domainName, domainVersion, chainId);
         const messageCV = jsonToClarityValue(messageJson);
 
@@ -1033,11 +1076,15 @@ addDomainOptions(sip018HashCmd)
     }) => {
       try {
         const messageJson = parseJsonObject(opts.message, "--message");
-        const { name: domainName, version: domainVersion } = resolveDomainParams(opts);
+        const {
+          name: domainName,
+          version: domainVersion,
+          chainId: domainChainId,
+        } = resolveDomainParams(opts);
 
         const chainId = opts.chainId
           ? parseInt(opts.chainId, 10)
-          : CHAIN_IDS[NETWORK];
+          : domainChainId ?? CHAIN_IDS[NETWORK];
 
         if (isNaN(chainId)) {
           throw new Error("--chain-id must be an integer");
@@ -1089,8 +1136,23 @@ program
     "--message <text>",
     "The plain text message to sign"
   )
-  .action(async (opts: { message: string }) => {
+  .option(
+    "--wallet-password <password>",
+    "Wallet password to auto-unlock before signing (sensitive)"
+  )
+  .option(
+    "--wallet-password-env <envVar>",
+    "Environment variable name containing wallet password (preferred over --wallet-password)",
+    "AIBTC_WALLET_PASSWORD"
+  )
+  .action(
+    async (opts: {
+      message: string;
+      walletPassword?: string;
+      walletPasswordEnv?: string;
+    }) => {
     try {
+      await unlockWalletFromOptions(opts);
       const account = requireUnlockedWallet();
 
       const msgHash = hashMessage(opts.message);
@@ -1226,8 +1288,24 @@ program
     "Address type to sign with: 'segwit' (bc1q, default) or 'taproot' (bc1p)",
     "segwit"
   )
-  .action(async (opts: { message: string; addressType: string }) => {
+  .option(
+    "--wallet-password <password>",
+    "Wallet password to auto-unlock before signing (sensitive)"
+  )
+  .option(
+    "--wallet-password-env <envVar>",
+    "Environment variable name containing wallet password (preferred over --wallet-password)",
+    "AIBTC_WALLET_PASSWORD"
+  )
+  .action(
+    async (opts: {
+      message: string;
+      addressType: string;
+      walletPassword?: string;
+      walletPasswordEnv?: string;
+    }) => {
     try {
+      await unlockWalletFromOptions(opts);
       const account = requireUnlockedWallet();
       const btcNetwork = getBtcNetwork();
 
