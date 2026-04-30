@@ -41,8 +41,10 @@ const DEFAULT_SLIPPAGE_PCT = 1;
 const DEFAULT_EXPIRY_HOURS = 24;
 const MAX_EXPIRY_DAYS = 7;
 const API_TIMEOUT_MS = 10_000;
-const TX_FEE_ESTIMATE = 5000; // microSTX
-const STX_FEE_RESERVE = TX_FEE_ESTIMATE / 1e6; // STX needed for tx fee regardless of side
+// (c) Fee raised to match observed Bitflow keeper baseline (SP3R9DN...4XCK uses 100_000 μSTX uniformly).
+//     Previous value of 5_000 μSTX would stall or queue under any fee pressure.
+const TX_FEE_ESTIMATE = 100_000; // microSTX — matches observed Bitflow keeper baseline
+const STX_FEE_RESERVE = TX_FEE_ESTIMATE / 1e6; // STX needed for tx fee regardless of side (= 0.1 STX)
 
 // Watch-mode + anti-wick
 const DEFAULT_CONFIRM_TICKS = 2;
@@ -148,8 +150,12 @@ function loadOrderBook(): OrderBook {
 }
 
 function saveOrderBook(book: OrderBook): void {
+  // (e) Atomic write via tmp-then-rename: a crash mid-write leaves old data intact
+  //     rather than silently zeroing all active orders on next loadOrderBook call.
   ensureDir();
-  fs.writeFileSync(ORDERS_FILE, JSON.stringify(book, null, 2));
+  const tmp = ORDERS_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(book, null, 2));
+  fs.renameSync(tmp, ORDERS_FILE);
 }
 
 // ─── Bitflow API helpers ──────────────────────────────────────────────────────
@@ -607,6 +613,10 @@ program
         return fail("set", e.message);
       }
 
+      // (f) Normalize pair to UPPER-CASE with dash delimiter before any storage or lookup.
+      //     runCycle splits on "-" — storing "stx_sbtc" would silently break tokenIn resolution.
+      opts.pair = opts.pair.toUpperCase().replace(/[_\s]/g, "-");
+
       // Find pool
       log(`Looking up pool: ${opts.pair}`);
       const pool = await findPool(opts.pair);
@@ -905,6 +915,11 @@ async function runCycle(ctx: CycleCtx): Promise<CycleStats> {
             stats.skipped++; if (ctx.useTicks) ctx.tickCounts.delete(order.orderId);
             continue;
           }
+        } else {
+          // (d) Unsupported tokenIn — skip gracefully rather than proceeding blindly
+          recordSkip(book, order, `Unsupported tokenIn: ${order.tokenIn} — only STX and sBTC are supported`);
+          stats.skipped++; if (ctx.useTicks) ctx.tickCounts.delete(order.orderId);
+          continue;
         }
       } catch (e: any) {
         recordSkip(book, order, `Balance check failed: ${e.message}`);
@@ -955,13 +970,21 @@ async function runCycle(ctx: CycleCtx): Promise<CycleStats> {
         }
         break; // one fill per cycle
       } catch (e: any) {
-        order.status = "error";
-        order.errorMessage = `Swap failed: ${e.message}`;
-        saveOrderBook(book);
-        appendEvent({ orderId: order.orderId, event: "error", stage: "swap", detail: e.message });
-        stats.errors++;
-        if (ctx.emitPerOrderJson) {
-          fail("execute", `Order #${order.orderId} swap failed: ${e.message}`);
+        // (i) Slippage violations and post-condition failures are transient — price moved
+        //     between check and execution. Treat as a skip so the order retries next cycle.
+        const isTransient = /slippage|post[- _.]condition|STXPostCondition|FungiblePostCondition/i.test(e.message);
+        if (isTransient) {
+          recordSkip(book, order, `Transient swap failure (retryable): ${e.message}`);
+          stats.skipped++; if (ctx.useTicks) ctx.tickCounts.delete(order.orderId);
+        } else {
+          order.status = "error";
+          order.errorMessage = `Swap failed: ${e.message}`;
+          saveOrderBook(book);
+          appendEvent({ orderId: order.orderId, event: "error", stage: "swap", detail: e.message });
+          stats.errors++;
+          if (ctx.emitPerOrderJson) {
+            fail("execute", `Order #${order.orderId} swap failed: ${e.message}`);
+          }
         }
         continue;
       }

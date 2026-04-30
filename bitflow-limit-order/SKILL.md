@@ -26,13 +26,13 @@ Sets price targets on Bitflow HODLMM pools, polls active bin mid-prices on each 
 
 ```
 User/Agent ──set──▶ Order File ──run──▶ Price Check ──trigger──▶ BitflowSDK Swap
-                    (~/.aibtc/          (HODLMM active bin)      (on-chain tx)
-                     limit-orders)
+                    (~/.aibtc/          (HODLMM active        (best-route tx via SDK;
+                     limit-orders)       bin mid-price)        not necessarily HODLMM)
 ```
 
 ## Why agents need it
 
-- **Zero limit order support exists on Bitflow** — no native UI, no Keeper contracts, no competing skills
+- **Agent-native limit orders** — Bitflow's native keeper handles orders server-side; this skill gives agents a self-hosted, fully configurable alternative with no third-party dependency
 - Every trader's #1 feature request on any DEX — high-leverage primitive
 - Enables autonomous trading strategies: set-and-forget price targets
 - HODLMM active bin provides an on-chain price oracle — no external feeds needed
