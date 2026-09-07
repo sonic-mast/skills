@@ -10,9 +10,10 @@ description: Stacks ecosystem community sentiment via the Vibewatch Stacks Vibe 
 
 - Free subcommands (`index`, `terms`, `reports`): none. No wallet, no funds.
 - Paid subcommands (`project`, `evidence`, `delta`): an unlocked wallet (the
-  `wallet` skill) holding sBTC for the advertised price plus nothing for gas
-  (payments go through the sponsored relay). Run `terms` first to see the
-  current price and accepted assets.
+  `wallet` skill) holding sBTC for the advertised price. The shared payment
+  engine decides whether the transfer is sponsored; when it is not, also hold
+  a little STX for the transaction fee. Run `terms` first to see the current
+  price and accepted assets.
 
 ## When to invoke
 
@@ -60,9 +61,9 @@ description: Stacks ecosystem community sentiment via the Vibewatch Stacks Vibe 
 | `--project … is ambiguous` (free, before payment) | Prefix matched several projects | Use the exact slug |
 | `--week … has no completed report` (free, before payment) | Not a Monday with a completed report | Use one of the `week_start` values listed in the error, or from the free `reports` subcommand |
 | 422 on `delta` | `since` missing or unparsable | Pass an ISO-8601 `--since` (or omit it for the 24h default) |
-| 402 `settlement_rejected` with `facilitator_reason` | The relay refused to settle; nothing was broadcast or charged | Read `facilitator_reason`. `client_insufficient_funds` can be the relay's own sponsor wallet running dry rather than yours (aibtcdev/x402-sponsor-relay#432) — check your balance, then run again |
+| 402 `settlement_rejected` with `facilitator_reason` | The facilitator refused to settle; nothing was broadcast or charged | Read `facilitator_reason`. On a sponsored transfer, `client_insufficient_funds` can mean the relay's sponsor wallet ran dry rather than yours (aibtcdev/x402-sponsor-relay#432) — check your balance, then run again |
 | 402 `payment_replayed` | The signed payment was already used for a different resource or outside the server's idempotency window | Run the command again (a new payment) |
-| 409 `payment_in_flight` (`facilitator_reason: transaction_held`) | The relay is holding the payment; it usually broadcasts it on its own within ~10 minutes and the server then settles it under that signature | Wait the `Retry-After` seconds. This CLI signs afresh on every run, so re-running is a second payment (replaying the original signature would collect the first one; aibtcdev/skills#420) |
+| 409 `payment_in_flight` (`facilitator_reason: transaction_held`) | Sponsored transfers only: the relay is holding the payment; it usually broadcasts it on its own within ~10 minutes and the server then settles it under that signature | Wait the `Retry-After` seconds. This CLI signs afresh on every run, so re-running is a second payment (replaying the original signature would collect the first one; aibtcdev/skills#420) |
 | 409 `delivery_in_flight` | The paid response is being written for this payment | Wait `Retry-After`, run again — the same signed payment is served, not charged twice |
 | 429 `challenge_rate_limited` / `settlement_rate_limited` | Per-sender rate limit | Wait `Retry-After` |
 | 502 `facilitator_unavailable`, 503 `settlement_busy` / `too_many_pending_claims` | Settlement infrastructure hiccup; a payment may be pending | Wait `Retry-After`, run again; the server's durable ledger recovers a pending payment without double-charging |
