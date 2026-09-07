@@ -107,7 +107,7 @@ function normalizeSince(raw: string | undefined): string {
 
 async function fetchFree(baseUrl: string, path: string): Promise<unknown> {
   const url = `${baseUrl}${path}`;
-  const res = await fetch(url, { method: "GET" });
+  const res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(10_000) });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} from ${url}`);
   }
