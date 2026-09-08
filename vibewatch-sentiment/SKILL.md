@@ -132,4 +132,5 @@ on both.
 - Methodology: https://stacks.vibewatch.io/methodology
 - Discovery: https://stacks.vibewatch.io/.well-known/x402.json
 - Weekly reports: https://stacks.vibewatch.io/reports
+- x402scan listing: https://scan.stacksx402.com/resources/6c71357a-b7f8-466e-a7e8-0e5babd8039d
 - Report a problem: https://github.com/Vibewatch-io/vibewatch-mcp/issues
