@@ -69,6 +69,7 @@ description: Stacks ecosystem community sentiment via the Vibewatch Stacks Vibe 
 | 429 `challenge_rate_limited` / `settlement_rate_limited` | Per-sender rate limit | Wait `Retry-After` |
 | 502 `facilitator_unavailable`, 503 `settlement_busy` / `too_many_pending_claims` | Settlement infrastructure hiccup; a payment may be pending | Wait `Retry-After`, run again; the server's durable ledger recovers a pending payment without double-charging |
 | `Insufficient sBTC balance` (before signing) | Wallet cannot cover the advertised price | Fund the wallet or stay on the free tier |
+| Top-level `txid: null` + `txidNote` (only when calling the raw endpoint through `execute_x402_endpoint` instead of this skill) | The MCP wrapper looks for `txid` / `payment_txid` at the top level of the body; the index reports the settlement in `payment.txid` and in the standard `payment-response` header | Not a failed payment. Read `payment.txid` (or `payment_receipt.transaction` from this skill) — that is the receipt to verify on Hiro |
 | `suppressed` entries in any payload | Data withheld by the index's k-anonymity floor | Report "withheld", never "zero" |
 
 ## Reporting a problem

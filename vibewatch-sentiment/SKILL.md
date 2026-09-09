@@ -82,6 +82,10 @@ a suffix, e.g. `zest-protocol-3672`, so you never have to know it). An
 unknown or ambiguous project fails before any payment and lists the panel.
 `latest` is null when the project's newest score is older than the index's
 7-day recency floor — an old number is never presented as current.
+A panel project whose free-index `score` is null (no scored days yet) is
+served as a normal paid 200 with `series: []` and `latest.score: null` — the
+query is charged. The skill refuses that call before payment; pass
+`--allow-unscored` to pay anyway.
 
 ### `evidence` (paid)
 
@@ -105,6 +109,31 @@ What changed since a timestamp (hour-bucketed): per-project score moves with
 constant-panel baselines, ecosystem composite then/now, current themes, and
 reports published since. Defaults to the last 24 hours; `--since` older than
 90 days is clamped.
+
+## Paid response shape
+
+Every paid subcommand returns the index's paid envelope (`schema_version`,
+`tier: "paid"`, `as_of`, `resource`, `payment`, `data`, `suppressed[]`) plus
+the skill's own `endpoint`, `network`, and `payment_receipt`:
+
+- `payment` — the settlement the index verified for this response: `txid`,
+  `payer`, `amount`, `asset`, `network`, and `payment_identifier` (the id the
+  operators match against their ledger). `payment.txid` is the receipt to
+  cite.
+- `payment_receipt` — the same settlement as the x402 `payment-response`
+  header, decoded (`success`, `payer`, `transaction`, `network`).
+  `payment_receipt.transaction` equals `payment.txid`.
+- `data` — the resource payload:
+  - `project`: `slug`, `name`, `latest { score, wow_change, as_of_date }`,
+    `series[] { date, composite }` (scored days only, oldest first).
+  - `evidence`: `week_start`, `themes[]` with `receipts[]`; a theme with only
+    in-server evidence has `receipts: []` and `suppressed: true`,
+    `reason: "no_public_evidence"`.
+  - `delta`: `since_effective` (hour-bucketed), `index { composite_then,
+    composite_now, change }`, `projects[]`, `reports_published[]`,
+    `themes_current[]`.
+- `suppressed[]` — slices withheld for privacy (`slice`, `reason`), e.g.
+  `index_delta` / `below_min_orgs`. Report them as withheld, not zero.
 
 ## Payment
 

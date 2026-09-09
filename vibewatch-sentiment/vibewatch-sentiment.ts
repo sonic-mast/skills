@@ -42,7 +42,7 @@ function normalizeProjectQuery(raw: string | undefined): string {
   return s;
 }
 
-type PanelProject = { slug: string; name: string };
+type PanelProject = { slug: string; name: string; score?: number | null };
 
 // Resolve a human name or bare slug to the panel's real slug with ONE free
 // index read, before anything is paid. Live slugs carry disambiguation
@@ -52,18 +52,20 @@ type PanelProject = { slug: string; name: string };
 async function resolveProjectSlug(
   baseUrl: string,
   query: string,
-): Promise<{ slug: string; name: string; resolved_from?: string }> {
+): Promise<{ slug: string; name: string; score: number | null; resolved_from?: string }> {
   const index = (await fetchFree(baseUrl, "/api/v1/public/stacks-index")) as { projects?: PanelProject[] };
   const projects = Array.isArray(index.projects) ? index.projects : [];
   const norm = (s: string) => s.toLowerCase().trim();
   const exactSlug = projects.find((p) => p.slug === query);
-  if (exactSlug) return { slug: exactSlug.slug, name: exactSlug.name };
+  if (exactSlug) return { slug: exactSlug.slug, name: exactSlug.name, score: exactSlug.score ?? null };
   const exactName = projects.find((p) => norm(p.name) === query);
-  if (exactName) return { slug: exactName.slug, name: exactName.name, resolved_from: query };
+  if (exactName) return { slug: exactName.slug, name: exactName.name, score: exactName.score ?? null, resolved_from: query };
   const dashed = query.replace(/[ .]+/g, "-");
   const bySlugPrefix = projects.filter((p) => p.slug === dashed || p.slug.startsWith(`${dashed}-`));
   const candidates = bySlugPrefix.length > 0 ? bySlugPrefix : projects.filter((p) => norm(p.name).startsWith(query));
-  if (candidates.length === 1) return { slug: candidates[0].slug, name: candidates[0].name, resolved_from: query };
+  if (candidates.length === 1) {
+    return { slug: candidates[0].slug, name: candidates[0].name, score: candidates[0].score ?? null, resolved_from: query };
+  }
   if (candidates.length > 1) {
     throw new Error(`--project "${query}" is ambiguous: ${candidates.map((p) => p.slug).join(", ")}. Use the exact slug.`);
   }
@@ -245,6 +247,11 @@ program
     'panel project name or slug ("Zest Protocol", "zest-protocol", or the exact slug from the free index)',
   )
   .option("--days <days>", "history window, 1-90", "90")
+  .option(
+    "--allow-unscored",
+    "pay even when the free index shows no current score for the project (the paid series may be empty)",
+    false,
+  )
   .option("--network <network>", "mainnet | testnet", "mainnet")
   .action(async (options) => {
     try {
@@ -252,6 +259,17 @@ program
       const query = normalizeProjectQuery(options.project);
       // One free read resolves the slug BEFORE any payment is signed.
       const resolved = await resolveProjectSlug(baseUrl, query);
+      // A panel project with no current score (free index `score: null`) is
+      // served by the paid endpoint as a 200 with `series: []` and
+      // `latest.score: null` — a charged query for an empty series. Fail free
+      // unless the caller opts in (found by Celestial Shark, aibtc bounty
+      // mtt3jjrgcf0aa8fb225c, 2026-09-08).
+      if (resolved.score === null && !options.allowUnscored) {
+        throw new Error(
+          `--project "${resolved.slug}" has no current score in the free index; the paid series would be empty. ` +
+            "Pass --allow-unscored to pay anyway.",
+        );
+      }
       const days = Math.min(90, Math.max(1, Number.parseInt(options.days, 10) || 90));
       const path = `/api/v1/public/stacks-index/pro/projects/${resolved.slug}?days=${days}`;
       const output = await paidGet(baseUrl, path, "vibewatch-sentiment.project");
